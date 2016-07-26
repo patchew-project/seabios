@@ -327,8 +327,24 @@ tpm_log_event(struct tcg_pcr_event2_sha1 *entry, const void *event
 
     if (tpm_state.log_area_next_entry == NULL)
         return -1;
+    int tpml_size = 0;
 
-    u32 size = sizeof(*entry) + entry->eventdatasize;
+    u32 size = 0;
+    switch (tpm_version) {
+    case TPM_VERSION_1_2:
+        size = sizeof(*entry) + entry->eventdatasize;
+        break;
+    case TPM_VERSION_2: ;
+        tpml_size = tpm20_write_tpml_dig_values(NULL, 0, entry->pcrindex,
+                                                entry->digests[0].sha1,
+                                                entry->digests[0].hashtype);
+        if (tpml_size <  0)
+            return -1;
+        size = offsetof(struct tcg_pcr_event2_sha1, digests) + tpml_size +
+               sizeof(entry->eventdatasize) + entry->eventdatasize;
+        break;
+    }
+
     u32 logsize = (tpm_state.log_area_next_entry + size
                    - tpm_state.log_area_start_address);
     if (logsize > tpm_state.log_area_minimum_length) {
@@ -347,9 +363,20 @@ tpm_log_event(struct tcg_pcr_event2_sha1 *entry, const void *event
         size = sizeof(*pcpes) + entry->eventdatasize;
         break;
     case TPM_VERSION_2: ;
-        struct tcg_pcr_event2_sha1 *e = (void*)tpm_state.log_area_next_entry;
-        memcpy(e, entry, sizeof(*e));
-        memcpy(e->event, event, entry->eventdatasize);
+        u8 *dest = tpm_state.log_area_next_entry;
+
+        unsigned int offset = offsetof(struct tcg_pcr_event2_sha1, digests);
+
+        memcpy(dest, entry, offset);
+        offset += tpm20_write_tpml_dig_values(&dest[offset], tpml_size,
+                                              entry->pcrindex,
+                                              entry->digests[0].sha1,
+                                              entry->digests[0].hashtype);
+        u32 *eventdatasize = (u32 *)&dest[offset];
+        *eventdatasize = entry->eventdatasize;
+        offset += sizeof(entry->eventdatasize);
+
+        memcpy(&dest[offset], event, entry->eventdatasize);
         break;
     }
 
@@ -740,7 +767,7 @@ tpm_add_measurement_to_log(u32 pcrindex, u32 event_type,
         .pcrindex = pcrindex,
         .eventtype = event_type,
         .eventdatasize = event_length,
-        .count = 1,
+        .digests[0].count = 1,
         .digests[0].hashtype  = TPM2_ALG_SHA1,
     };
     sha1(hashdata, hashdata_length, entry.digests[0].sha1);
@@ -1281,7 +1308,7 @@ hash_log_extend(struct pcpes *pcpes, const void *hashdata, u32 hashdata_length
         .pcrindex = pcpes->pcrindex,
         .eventtype = pcpes->eventtype,
         .eventdatasize = pcpes->eventdatasize,
-        .count = 1,
+        .digests[0].count = 1,
         .digests[0].hashtype = TPM2_ALG_SHA1,
     };
     memcpy(entry.digests[0].sha1, pcpes->digest, sizeof(entry.digests[0].sha1));
