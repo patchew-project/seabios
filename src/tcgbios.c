@@ -909,16 +909,18 @@ tpm_setup(void)
     if (ret)
         return;
 
-    tpm_log_init();
-
     TPM_working = 1;
 
-    if (runningOnXen())
+    if (runningOnXen()) {
+        tpm_log_init();
         return;
+    }
 
     ret = tpm_startup();
     if (ret)
         return;
+
+    tpm_log_init();
 
     tpm_smbios_measure();
     tpm_add_action(2, "Start Option ROM Scan");
