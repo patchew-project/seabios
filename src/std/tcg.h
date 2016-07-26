@@ -541,6 +541,14 @@ struct tcg_pcr_event2_sha1 {
     u8 event[0];
 } PACKED;
 
+struct TCG_EfiSpecIdEventAlgorithms {
+    u32 numberOfAlgorithms;
+    struct TCG_EfiSpecIDEventAlgorithmSize {
+        u16 algorithmId;
+        u16 digestSize;
+    } digestSizes[0];
+} PACKED;
+
 struct TCG_EfiSpecIdEventStruct {
     u8 signature[16];
     u32 platformClass;
@@ -548,14 +556,12 @@ struct TCG_EfiSpecIdEventStruct {
     u8 specVersionMajor;
     u8 specErrata;
     u8 uintnSize;
-    u32 numberOfAlgorithms;
-    struct TCG_EfiSpecIdEventAlgorithmSize {
-        u16 algorithmId;
-        u16 digestSize;
-    } digestSizes[1];
+    struct TCG_EfiSpecIdEventAlgorithms algs;
+    /*
     u8 vendorInfoSize;
     u8 vendorInfo[0];
-};
+    */
+} PACKED;
 
 #define TPM_TCPA_ACPI_CLASS_CLIENT 0
 

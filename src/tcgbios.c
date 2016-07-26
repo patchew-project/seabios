@@ -183,6 +183,78 @@ tpm20_write_tpml_dig_values(u8 *dest, size_t destlen, u32 pcrindex,
     return offset;
 }
 
+int
+tpm20_write_EfiSpecIdEventStruct(char *dest, size_t destlen)
+{
+    if (!tpm20_pcr_selection)
+        return -1;
+
+    struct TCG_EfiSpecIdEventStruct temp = {
+        .signature = "Spec ID Event03",
+        .platformClass = TPM_TCPA_ACPI_CLASS_CLIENT,
+        .specVersionMinor = 0,
+        .specVersionMajor = 2,
+        .specErrata = 0,
+        .uintnSize = 2,
+        .algs = {
+            .numberOfAlgorithms = 0, /* fill below */
+        },
+    }, *event = (struct TCG_EfiSpecIdEventStruct *)dest;
+
+    int hsize;
+    struct tpms_pcr_selection *sel = tpm20_pcr_selection->selections;
+    void *nsel, *end = (void *)tpm20_pcr_selection + tpm20_pcr_selection_size;
+    struct TCG_EfiSpecIdEventAlgorithms *algs = &event->algs;
+
+    int offset = offsetof(struct TCG_EfiSpecIdEventStruct,
+                          algs.digestSizes[0]);
+    u32 count;
+
+    memcpy(event, &temp, offset);
+
+    for (count = 0;
+         count < be32_to_cpu(tpm20_pcr_selection->count);
+         count++) {
+        u8 sizeOfSelect = sel->sizeOfSelect;
+
+        nsel = (void *)sel +
+               offsetof(struct tpms_pcr_selection, pcrSelect) +
+               sizeOfSelect;
+        if (nsel > end)
+            break;
+
+        hsize = tpm20_get_hash_buffersize(be16_to_cpu(sel->hashAlg));
+        if (hsize < 0) {
+            dprintf(DEBUG_tcg, "TPM is using an unsupported hash: %d\n",
+                    be16_to_cpu(sel->hashAlg));
+            return -1;
+        }
+
+        algs->digestSizes[count].algorithmId = be16_to_cpu(sel->hashAlg);
+        algs->digestSizes[count].digestSize = hsize;
+
+        offset += sizeof(algs->digestSizes[0]);
+
+        sel = nsel;
+    }
+
+    if (sel != end) {
+        dprintf(DEBUG_tcg, "Malformed pcr selection structure fron TPM\n");
+        return -1;
+    }
+    event->algs.numberOfAlgorithms = count;
+
+    u32 *vendorInfoSize = (u32 *)&dest[offset];
+    *vendorInfoSize = 0;
+    offset += sizeof(*vendorInfoSize);
+
+    if (dest && offset > destlen)
+        panic("buffer for log event is too small (%d < %d)\n",
+              destlen, offset);
+
+    return offset;
+}
+
 static struct tcpa_descriptor_rev2 *
 find_tcpa_by_rsdp(struct rsdp_descriptor *rsdp)
 {
@@ -346,31 +418,25 @@ tpm20_get_pcrbanks(void)
 static void
 tpm_log_init(void)
 {
-    struct TCG_EfiSpecIdEventStruct event = {
-        .signature = "Spec ID Event03",
-        .platformClass = TPM_TCPA_ACPI_CLASS_CLIENT,
-        .specVersionMinor = 0,
-        .specVersionMajor = 2,
-        .specErrata = 0,
-        .uintnSize = 2,
-        .numberOfAlgorithms = 1,
-        .digestSizes[0] = {
-             .algorithmId = TPM2_ALG_SHA1,
-             .digestSize = SHA1_BUFSIZE,
-        },
-        .vendorInfoSize = 0,
-    };
-    struct tcg_pcr_event2_sha1 entry = {
-        .eventtype = EV_NO_ACTION,
-        .eventdatasize = sizeof(event),
-    };
-
     switch (TPM_version) {
     case TPM_VERSION_1_2:
         break;
-    case TPM_VERSION_2:
+    case TPM_VERSION_2: ;
+        int ret = tpm20_get_pcrbanks();
+        /* if this failed, no entry will be written */
+        if (ret)
+            return;
+
         /* write a 1.2 type of entry */
-        tpm_log_event(&entry, &event, TPM_VERSION_1_2);
+        char buf[256];
+        ret = tpm20_write_EfiSpecIdEventStruct(buf, sizeof(buf));
+        if (ret < 0)
+            return;
+        struct tcg_pcr_event2_sha1 entry = {
+            .eventtype = EV_NO_ACTION,
+            .eventdatasize = ret,
+        };
+        tpm_log_event(&entry, buf, TPM_VERSION_1_2);
     }
 }
 
@@ -863,10 +929,6 @@ tpm20_startup(void)
     dprintf(DEBUG_tcg, "TCGBIOS: Return value from sending TPM2_CC_SelfTest = 0x%08x\n",
             ret);
 
-    if (ret)
-        goto err_exit;
-
-    ret = tpm20_get_pcrbanks();
     if (ret)
         goto err_exit;
 
