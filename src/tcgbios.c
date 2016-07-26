@@ -26,6 +26,8 @@
 #include "stacks.h" // wait_threads, reset
 #include "malloc.h" // malloc_high
 
+#define min(a,b) ((a) < (b)) ? (a) : (b)
+
 /****************************************************************
  * TPM 1.2 commands
  ****************************************************************/
@@ -79,6 +81,107 @@ static TPMVersion TPM_version;
 
 static u32 tpm20_pcr_selection_size;
 static struct tpml_pcr_selection *tpm20_pcr_selection;
+
+static int
+tpm20_get_hash_buffersize(u16 hashAlg)
+{
+    switch (hashAlg) {
+    case TPM2_ALG_SHA1:
+        return SHA1_BUFSIZE;
+    case TPM2_ALG_SHA256:
+        return SHA256_BUFSIZE;
+    case TPM2_ALG_SHA384:
+        return SHA384_BUFSIZE;
+    case TPM2_ALG_SHA512:
+        return SHA512_BUFSIZE;
+    case TPM2_ALG_SM3_256:
+        return SM3_256_BUFSIZE;
+    default:
+        return -1;
+    }
+}
+
+/*
+ * Write the TPM2 tpml_digest_values data structure from the given hash.
+ * Follow the PCR bank configuration of the TPM and write the same hash
+ * in either truncated or zero-padded form in the areas of all the other
+ * hashes. For example, write the sha1 hash in the area of the sha256
+ * hash and fill the remaining bytes with zeros. Or truncate the sha256
+ * hash when writing it in the area of the sha1 hash.
+ *
+ * dest: destination buffer to write into; if NULL, nothing is written
+ * destlen: length of destination buffer
+ * pcrindex: the PCR index
+ * hash: the hash value to write
+ * hashAlg: the hash alogorithm determining the size of the hash
+ * count: pointer to a counter for how many entries were writte
+ *
+ * Returns the number of bytes needed in the buffer; -1 on fatal error
+ */
+static int
+tpm20_write_tpml_dig_values(u8 *dest, size_t destlen, u32 pcrindex,
+                            const u8 *hash, u16 hashAlg)
+{
+    if (!tpm20_pcr_selection)
+        return -1;
+
+    int hsize;
+    struct tpms_pcr_selection *sel = tpm20_pcr_selection->selections;
+    void *nsel, *end = (void *)tpm20_pcr_selection + tpm20_pcr_selection_size;
+    int hash_size = tpm20_get_hash_buffersize(hashAlg);
+    int offset = offsetof(struct tpml_digest_values, digest);
+    u32 count;
+
+    for (count = 0;
+         count < be32_to_cpu(tpm20_pcr_selection->count);
+         count++) {
+        u8 sizeOfSelect = sel->sizeOfSelect;
+
+        nsel = (void *)sel +
+               offsetof(struct tpms_pcr_selection, pcrSelect) +
+               sizeOfSelect;
+        if (nsel > end)
+            break;
+
+        u8 idx = pcrindex >> 3;
+        u8 mask = (1 << (pcrindex & 7));
+        /* skip if PCR not used in this bank */
+        if (idx > sizeOfSelect || !(sel->pcrSelect[idx] & mask))
+            continue;
+
+        hsize = tpm20_get_hash_buffersize(be16_to_cpu(sel->hashAlg));
+        if (hsize < 0) {
+            dprintf(DEBUG_tcg, "TPM is using an unsupported hash: %d\n",
+                    be16_to_cpu(sel->hashAlg));
+            return -1;
+        }
+
+        if (dest) {
+            struct tpm2_digest_value *v =
+              (struct tpm2_digest_value *)&dest[offset];
+            v->hashAlg = sel->hashAlg;
+            memset(v->hash, 0, hsize);
+            memcpy(v->hash, hash, min(hash_size, hsize));
+        }
+        offset += sizeof(sel->hashAlg) + hsize;
+        sel = nsel;
+    }
+
+    if (sel != end) {
+        dprintf(DEBUG_tcg, "Malformed pcr selection structure fron TPM\n");
+        return -1;
+    }
+
+    if (dest && offset > destlen)
+        panic("buffer for tpml_digest_values is too small\n");
+
+    if (dest) {
+        struct tpml_digest_values *v = (struct tpml_digest_values *)dest;
+        v->count = cpu_to_be32(count);
+    }
+
+    return offset;
+}
 
 static struct tcpa_descriptor_rev2 *
 find_tcpa_by_rsdp(struct rsdp_descriptor *rsdp)
@@ -501,7 +604,7 @@ static int tpm20_extend(u32 pcrindex, const u8 *digest, u16 hashAlg)
 {
     struct tpm2_req_extend tmp_tre = {
         .hdr.tag     = cpu_to_be16(TPM2_ST_SESSIONS),
-        .hdr.totlen  = cpu_to_be32(sizeof(tmp_tre)),
+        .hdr.totlen  = cpu_to_be32(0),
         .hdr.ordinal = cpu_to_be32(TPM2_CC_PCR_Extend),
         .pcrindex    = cpu_to_be32(pcrindex),
         .authblocksize = cpu_to_be32(sizeof(tmp_tre.authblock)),
@@ -512,14 +615,18 @@ static int tpm20_extend(u32 pcrindex, const u8 *digest, u16 hashAlg)
             .pwdsize = cpu_to_be16(0),
         },
     };
-    u32 count = 1;
-    u8 buffer[sizeof(tmp_tre) + sizeof(struct tpm2_digest_value)];
+    u8 buffer[sizeof(tmp_tre) + MAX_TPML_DIGEST_VALUES_SIZE];
     struct tpm2_req_extend *tre = (struct tpm2_req_extend *)buffer;
 
     memcpy(tre, &tmp_tre, sizeof(tmp_tre));
-    tre->count = cpu_to_be32(count);
-    tre->digest.hashalg = cpu_to_be16(hashAlg);
-    memcpy(tre->digest.sha1, digest, sizeof(tmp_tre.digest.sha1));
+
+    int size = tpm20_write_tpml_dig_values(&tre->data[0],
+        sizeof(buffer) - offsetof(struct tpm2_req_extend, data),
+        pcrindex, digest, hashAlg);
+    if (size < 0)
+        return size;
+
+    tre->hdr.totlen = cpu_to_be32(sizeof(tmp_tre) + size);
 
     struct tpm_rsp_header rsp;
     u32 resp_length = sizeof(rsp);
