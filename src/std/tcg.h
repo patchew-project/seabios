@@ -533,10 +533,12 @@ struct tpml_digest_values_sha1 {
     u8 sha1[SHA1_BUFSIZE];
 } PACKED;
 
-struct tcg_pcr_event2_sha1 {
+struct tcg_pcr_event2_data {
     u32 pcrindex;
     u32 eventtype;
-    struct tpml_digest_values_sha1 digest;
+    /* missing here is the variable size
+       struct tpml_digest_values digests[];
+    */
     u32 eventdatasize;
     u8 event[0];
 } PACKED;
