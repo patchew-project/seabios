@@ -26,6 +26,8 @@
 #include "stacks.h" // wait_threads, reset
 #include "malloc.h" // malloc_high
 
+#define min(a,b) ((a) < (b)) ? (a) : (b)
+
 /****************************************************************
  * TPM 1.2 commands
  ****************************************************************/
@@ -243,6 +245,131 @@ tpm_can_show_menu(void)
         return tpm_is_working();
     }
     return 0;
+}
+
+static int
+tpm20_get_hash_buffersize(u16 hashAlg)
+{
+    switch (hashAlg) {
+    case TPM2_ALG_SHA1:
+        return SHA1_BUFSIZE;
+    case TPM2_ALG_SHA256:
+        return SHA256_BUFSIZE;
+    case TPM2_ALG_SHA384:
+        return SHA384_BUFSIZE;
+    case TPM2_ALG_SHA512:
+        return SHA512_BUFSIZE;
+    case TPM2_ALG_SM3_256:
+        return SM3_256_BUFSIZE;
+    default:
+        return -1;
+    }
+}
+
+/*
+ * Write the TPM2 tpml_digest_values data structure from the given hash.
+ * Follow the PCR bank configuration of the TPM and write the same hash
+ * in either truncated or zero-padded form in the areas of all the other
+ * hashes. For example, write the sha1 hash in the area of the sha256
+ * hash and fill the remaining bytes with zeros. Or truncate the sha256
+ * hash when writing it in the area of the sha1 hash.
+ *
+ * dest: destination buffer to write into; if NULL, nothing is written
+ * destlen: length of destination buffer
+ * hash: the hash value to write
+ * hashAlg: the hash alogorithm determining the size of the hash
+ *
+ * Returns the number of bytes needed in the buffer; -1 on fatal error
+ */
+static int
+tpm20_write_tpml_dig_values(u8 *dest, size_t destlen,
+                            const u8 *hash, u16 hashAlg)
+{
+    if (!tpm20_pcr_selection)
+        return -1;
+
+    int hsize;
+    struct tpms_pcr_selection *sel = tpm20_pcr_selection->selections;
+    void *nsel, *end = (void *)tpm20_pcr_selection + tpm20_pcr_selection_size;
+    int hash_size = tpm20_get_hash_buffersize(hashAlg);
+    int offset = offsetof(struct tpml_digest_values, digest);
+    u32 count;
+
+    for (count = 0;
+         count < be32_to_cpu(tpm20_pcr_selection->count);
+         count++) {
+        u8 sizeOfSelect = sel->sizeOfSelect;
+
+        nsel = (void *)sel +
+               offsetof(struct tpms_pcr_selection, pcrSelect) +
+               sizeOfSelect;
+        if (nsel > end)
+            break;
+
+        hsize = tpm20_get_hash_buffersize(be16_to_cpu(sel->hashAlg));
+        if (hsize < 0) {
+            dprintf(DEBUG_tcg, "TPM is using an unsupported hash: %d\n",
+                    be16_to_cpu(sel->hashAlg));
+            return -1;
+        }
+
+        struct tpm2_digest_value *v = (struct tpm2_digest_value *)&dest[offset];
+
+        /* buffer size sanity check before writing */
+        offset += sizeof(sel->hashAlg) + hsize;
+        if (offset > destlen) {
+            dprintf(DEBUG_tcg, "Buffer for tpml_digest_values is too small\n");
+            return -1;
+        }
+
+        v->hashAlg = sel->hashAlg;
+        memset(v->hash, 0, hsize);
+        memcpy(v->hash, hash, min(hash_size, hsize));
+
+        sel = nsel;
+    }
+
+    if (sel != end) {
+        dprintf(DEBUG_tcg, "Malformed pcr selection structure fron TPM\n");
+        return -1;
+    }
+
+    struct tpml_digest_values *v = (struct tpml_digest_values *)dest;
+    v->count = cpu_to_be32(count);
+
+    return offset;
+}
+
+static int
+tpm12_write_tpml_dig_values(u8 *dest, size_t destlen,
+                            const u8 *hash, u16 hashAlg)
+{
+    if (destlen < sizeof(struct tpml_digest_values_sha1)) {
+        dprintf(DEBUG_tcg, "Buffer for tpml_digest_values_sha1 is too small\n");
+        return -1;
+    }
+
+    struct tpml_digest_values_sha1 *tdvs =
+        (struct tpml_digest_values_sha1 *)dest;
+
+    tdvs->count = 1;
+    tdvs->hashtype = hashAlg;
+    memcpy(tdvs->sha1, hash, sizeof(tdvs->sha1));
+
+    return sizeof(*tdvs);
+}
+
+static int
+tpm_write_tpml_digest_values(u8 *dest, size_t destlen,
+                             const u8 *hash, u16 hashAlg)
+{
+    switch (TPM_version) {
+    case TPM_VERSION_1_2:
+      return tpm12_write_tpml_dig_values(dest, destlen, hash, hashAlg);
+    case TPM_VERSION_2:
+      return tpm20_write_tpml_dig_values(dest, destlen, hash, hashAlg);
+    }
+    return -1;
 }
 
 /*
@@ -497,11 +624,12 @@ tpm12_extend(u32 pcrindex, const u8 *digest)
     return 0;
 }
 
-static int tpm20_extend(u32 pcrindex, const u8 *digest)
+static int tpm20_extend(u32 pcrindex,
+                        const struct tpml_digest_values *tdv, int tdv_len)
 {
     struct tpm2_req_extend tmp_tre = {
         .hdr.tag     = cpu_to_be16(TPM2_ST_SESSIONS),
-        .hdr.totlen  = cpu_to_be32(sizeof(tmp_tre)),
+        .hdr.totlen  = cpu_to_be32(0),
         .hdr.ordinal = cpu_to_be32(TPM2_CC_PCR_Extend),
         .pcrindex    = cpu_to_be32(pcrindex),
         .authblocksize = cpu_to_be32(sizeof(tmp_tre.authblock)),
@@ -512,14 +640,13 @@ static int tpm20_extend(u32 pcrindex, const u8 *digest)
             .pwdsize = cpu_to_be16(0),
         },
     };
-    u32 count = 1;
-    u8 buffer[sizeof(tmp_tre) + sizeof(struct tpm2_digest_value)];
+    u8 buffer[sizeof(tmp_tre) + MAX_TPML_DIGEST_VALUES_SIZE];
     struct tpm2_req_extend *tre = (struct tpm2_req_extend *)buffer;
 
     memcpy(tre, &tmp_tre, sizeof(tmp_tre));
-    tre->count = cpu_to_be32(count);
-    tre->digest.hashalg = cpu_to_be16(TPM2_ALG_SHA1);
-    memcpy(tre->digest.sha1, digest, sizeof(tmp_tre.digest.sha1));
+    memcpy(&tre->data[0], tdv, tdv_len);
+
+    tre->hdr.totlen = cpu_to_be32(sizeof(tmp_tre) + tdv_len);
 
     struct tpm_rsp_header rsp;
     u32 resp_length = sizeof(rsp);
@@ -532,13 +659,13 @@ static int tpm20_extend(u32 pcrindex, const u8 *digest)
 }
 
 static int
-tpm_extend(u32 pcrindex, const u8 *digest)
+tpm_extend(u32 pcrindex, const struct tpml_digest_values *tdv, int tdv_len)
 {
     switch (TPM_version) {
-    case TPM_VERSION_1_2:
-        return tpm12_extend(pcrindex, digest);
+    case TPM_VERSION_1_2: ;
+        return tpm12_extend(pcrindex, tdv->digest[0].hash);
     case TPM_VERSION_2:
-        return tpm20_extend(pcrindex, digest);
+        return tpm20_extend(pcrindex, tdv, tdv_len);
     }
     return -1;
 }
@@ -573,7 +700,16 @@ tpm_add_measurement_to_log(u32 pcrindex, u32 event_type,
         }
     };
     sha1(hashdata, hashdata_length, entry.digest.sha1);
-    int ret = tpm_extend(entry.pcrindex, entry.digest.sha1);
+
+    u8 buffer[MAX_TPML_DIGEST_VALUES_SIZE];
+
+    int tdv_len = tpm_write_tpml_digest_values(buffer, sizeof(buffer),
+        entry.digest.sha1, TPM2_ALG_SHA1);
+    if (tdv_len < 0)
+        return;
+
+    struct tpml_digest_values *tdv = (struct tpml_digest_values *)buffer;
+    int ret = tpm_extend(pcrindex, tdv, tdv_len);
     if (ret) {
         tpm_set_failure();
         return;
@@ -1103,8 +1239,18 @@ hash_log_extend(struct pcpes *pcpes, const void *hashdata, u32 hashdata_length
         return TCG_INVALID_INPUT_PARA;
     if (hashdata)
         sha1(hashdata, hashdata_length, pcpes->digest);
+
+    u8 buffer[MAX_TPML_DIGEST_VALUES_SIZE];
+
+    int tdv_len = tpm_write_tpml_digest_values(buffer, sizeof(buffer),
+        pcpes->digest, TPM2_ALG_SHA1);
+    if (tdv_len < 0)
+        return TCG_GENERAL_ERROR;
+
+    struct tpml_digest_values *tdv = (struct tpml_digest_values *)buffer;
+
     if (extend) {
-        int ret = tpm_extend(pcpes->pcrindex, pcpes->digest);
+        int ret = tpm_extend(pcpes->pcrindex, tdv, tdv_len);
         if (ret)
             return TCG_TCG_COMMAND_ERROR;
     }
