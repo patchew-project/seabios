@@ -201,6 +201,7 @@ qemu_platform_setup(void)
 #define QEMU_CFG_SIGNATURE              0x00
 #define QEMU_CFG_ID                     0x01
 #define QEMU_CFG_UUID                   0x02
+#define QEMU_CFG_NOGRAPHIC              0x04
 #define QEMU_CFG_NUMA                   0x0d
 #define QEMU_CFG_BOOT_MENU              0x0e
 #define QEMU_CFG_MAX_CPUS               0x0f
@@ -418,6 +419,7 @@ qemu_cfg_legacy(void)
     qemu_romfile_add("etc/show-boot-menu", QEMU_CFG_BOOT_MENU, 0, 2);
     qemu_romfile_add("etc/irq0-override", QEMU_CFG_IRQ0_OVERRIDE, 0, 1);
     qemu_romfile_add("etc/max-cpus", QEMU_CFG_MAX_CPUS, 0, 2);
+    qemu_romfile_add("etc/sercon-enable", QEMU_CFG_NOGRAPHIC, 0, 2);
 
     // NUMA data
     u64 numacount;
