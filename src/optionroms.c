@@ -432,9 +432,14 @@ vgarom_setup(void)
     run_file_roms("vgaroms/", 1, NULL);
     rom_reserve(0);
 
-    if (rom_get_last() == BUILD_ROM_START)
+    if (rom_get_last() == BUILD_ROM_START) {
         // No VGA rom found
+        if (romfile_loadint("etc/sercon-enable", 0)) {
+            sercon_enable();
+            enable_vga_console();
+        }
         return;
+    }
 
     VgaROM = (void*)BUILD_ROM_START;
     enable_vga_console();
