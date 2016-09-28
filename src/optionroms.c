@@ -442,6 +442,8 @@ vgarom_setup(void)
     }
 
     VgaROM = (void*)BUILD_ROM_START;
+    if (romfile_loadint("etc/sercon-enable", 0))
+        sercon_enable();
     enable_vga_console();
 }
 

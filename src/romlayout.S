@@ -524,6 +524,20 @@ irqentry_arg:
         DECL_IRQ_ENTRY hwpic1
         DECL_IRQ_ENTRY hwpic2
 
+        // hooked int10, for sercon
+        DECLFUNC entry_10_hooked
+entry_10_hooked:
+        // Setup for iretw in irqentry_arg
+        pushfw
+        pushl %cs:sercon_int10_hook_resume
+
+        pushl $sercon_10_splitmode
+#if CONFIG_ENTRY_EXTRASTACK
+        jmp irqentry_arg_extrastack
+#else
+        jmp irqentry_arg
+#endif
+
         // int 18/19 are special - they reset stack and call into 32bit mode.
         DECLFUNC entry_19
 entry_19:

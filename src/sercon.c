@@ -9,6 +9,7 @@
 #include "stacks.h" // yield
 #include "output.h" // dprintf
 #include "util.h" // irqtimer_calc_ticks
+#include "string.h" // memcpy
 #include "hw/serialio.h" // SEROFF_IER
 #include "cp437.h"
 
@@ -45,6 +46,8 @@ static void cursor_pos_set(u8 row, u8 col)
  ****************************************************************/
 
 VARLOW u16 sercon_port;
+VARLOW u8 sercon_split;
+VARFSEG struct segoff_s sercon_int10_hook_resume;
 
 /*
  * We have a small output buffer here, for lazy output.  That allows
@@ -63,6 +66,11 @@ VARLOW u8 sercon_char;
 VARLOW u8 sercon_attr = 0x07;
 
 static VAR16 u8 sercon_cmap[8] = { '0', '4', '2', '6', '1', '5', '3', '7' };
+
+static int sercon_splitmode(void)
+{
+    return GET_LOW(sercon_split);
+}
 
 static void sercon_putchar(u8 chr)
 {
@@ -174,6 +182,15 @@ static void sercon_print_utf8(u8 chr)
     }
 }
 
+static void sercon_cursor_pos_set(u8 row, u8 col)
+{
+    if (!sercon_splitmode()) {
+        cursor_pos_set(row, col);
+    } else {
+        /* let vgabios update cursor */
+    }
+}
+
 static void sercon_lazy_cursor_sync(void)
 {
     u8 row = cursor_pos_row();
@@ -222,7 +239,7 @@ static void sercon_lazy_flush(void)
 
 static void sercon_lazy_cursor_update(u8 row, u8 col)
 {
-    cursor_pos_set(row, col);
+    sercon_cursor_pos_set(row, col);
     SET_LOW(sercon_row_last, row);
     SET_LOW(sercon_col_last, col);
 }
@@ -241,7 +258,7 @@ static void sercon_lazy_backspace(void)
 
 static void sercon_lazy_cr(void)
 {
-    cursor_pos_set(cursor_pos_row(), 0);
+    sercon_cursor_pos_set(cursor_pos_row(), 0);
 }
 
 static void sercon_lazy_lf(void)
@@ -256,7 +273,7 @@ static void sercon_lazy_lf(void)
             SET_LOW(sercon_row_last, GET_LOW(sercon_row_last) - 1);
         }
     }
-    cursor_pos_set(row, cursor_pos_col());
+    sercon_cursor_pos_set(row, cursor_pos_col());
 }
 
 static void sercon_lazy_move_cursor(void)
@@ -268,7 +285,7 @@ static void sercon_lazy_move_cursor(void)
         sercon_lazy_cr();
         sercon_lazy_lf();
     } else {
-        cursor_pos_set(cursor_pos_row(), col);
+        sercon_cursor_pos_set(cursor_pos_row(), col);
     }
 }
 
@@ -293,22 +310,26 @@ static void sercon_1000(struct bregs *regs)
     u8 mode = regs->al & 0x7f;
     u8 rows, cols;
 
-    switch (mode) {
-    case 0x03:
-    default:
-        cols = 80;
-        rows = 25;
-        regs->al = 0x30;
+    if (!sercon_splitmode()) {
+        switch (mode) {
+        case 0x03:
+        default:
+            cols = 80;
+            rows = 25;
+            regs->al = 0x30;
+        }
+        cursor_pos_set(0, 0);
+        SET_BDA(video_mode, mode);
+        SET_BDA(video_cols, cols);
+        SET_BDA(video_rows, rows-1);
+        SET_BDA(cursor_type, 0x0007);
+    } else {
+        /* let vgabios handle mode init */;
     }
+
     SET_LOW(sercon_col_last, 0);
     SET_LOW(sercon_row_last, 0);
     SET_LOW(sercon_attr_last, 0);
-
-    cursor_pos_set(0, 0);
-    SET_BDA(video_mode, mode);
-    SET_BDA(video_cols, cols);
-    SET_BDA(video_rows, rows-1);
-    SET_BDA(cursor_type, 0x0007);
 
     sercon_term_reset();
     sercon_term_no_linewrap();
@@ -326,10 +347,7 @@ static void sercon_1001(struct bregs *regs)
 /* Set cursor position */
 static void sercon_1002(struct bregs *regs)
 {
-    u8 row = regs->dh;
-    u8 col = regs->dl;
-
-    cursor_pos_set(row, col);
+    sercon_cursor_pos_set(regs->dh, regs->dl);
 }
 
 /* Get cursor position */
@@ -456,9 +474,46 @@ sercon_10(struct bregs *regs)
     }
 }
 
+void VISIBLE16
+sercon_10_splitmode(struct bregs *regs)
+{
+    if (!GET_LOW(sercon_port))
+        return;
+
+    switch (regs->ah) {
+    case 0x01:
+    case 0x02:
+    case 0x03:
+    case 0x08:
+    case 0x0f:
+    case 0x4f:
+        /* nothing, vgabios did all work */
+        break;
+    case 0x00: sercon_1000(regs); break;
+    case 0x06: sercon_1006(regs); break;
+    case 0x09: sercon_1009(regs); break;
+    case 0x0e: sercon_100e(regs); break;
+    default:   sercon_10XX(regs); break;
+    }
+}
+
 void sercon_enable(void)
 {
+    struct segoff_s seabios, vgabios;
     u16 addr = PORT_SERIAL1;
+
+    vgabios = GET_IVT(0x10);
+    seabios = FUNC16(entry_10);
+    if (vgabios.seg != seabios.seg ||
+        vgabios.offset != seabios.offset) {
+        dprintf(1, "%s:%d: using splitmode (vgabios %04x:%04x, hook %04x:%04x)\n",
+                __func__, __LINE__,
+                vgabios.seg, vgabios.offset,
+                seabios.seg, seabios.offset);
+        sercon_int10_hook_resume = vgabios;
+        SET_IVT(0x10, FUNC16(entry_10_hooked));
+        SET_LOW(sercon_split, 1);
+    }
 
     SET_LOW(sercon_port, addr);
     outb(0x03, addr + SEROFF_LCR); // 8N1
