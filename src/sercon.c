@@ -456,6 +456,8 @@ static void sercon_10XX(struct bregs *regs)
 void VISIBLE16
 sercon_10(struct bregs *regs)
 {
+    if (!CONFIG_SERCON)
+        return;
     if (!GET_LOW(sercon_port))
         return;
 
@@ -477,6 +479,8 @@ sercon_10(struct bregs *regs)
 void VISIBLE16
 sercon_10_splitmode(struct bregs *regs)
 {
+    if (!CONFIG_SERCON)
+        return;
     if (!GET_LOW(sercon_port))
         return;
 
@@ -499,6 +503,9 @@ sercon_10_splitmode(struct bregs *regs)
 
 void sercon_enable(void)
 {
+    if (!CONFIG_SERCON)
+        return;
+
     struct segoff_s seabios, vgabios;
     u16 addr = PORT_SERIAL1;
 
@@ -596,6 +603,9 @@ static int findseq(void)
 void
 sercon_check_event(void)
 {
+    if (!CONFIG_SERCON)
+        return;
+
     u16 addr = GET_LOW(sercon_port);
     u16 keycode;
     u8 byte, count = 0;
