@@ -157,7 +157,7 @@ into bootorder. For example, the file:
 /pci@i0cf8/*@f/drive@1/disk@0
 ```
 
-will instruct SeaBIOS to attempt to boot from the given USB drive
+Will instruct SeaBIOS to attempt to boot from the given USB drive
 first and then attempt the given ATA harddrive second.
 
 SeaBIOS also supports a special "HALT" directive. If a line that
