@@ -1,7 +1,10 @@
-SeaBIOS can read several configuration items at runtime. On coreboot
-the configuration comes from files located in CBFS. When SeaBIOS runs
-natively on QEMU the files are passed from QEMU via the fw_cfg
-interface.
+SeaBIOS can read several configuration items at runtime:
+
+* on coreboot via CBFS,
+* on QEMU via fw_cfg, or
+* on multiboot bootloader (eg, Grub2) as modules.
+
+Basically, all three present different read-only file systems.
 
 This page documents the user visible configuration and control
 features that SeaBIOS supports.
