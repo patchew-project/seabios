@@ -311,11 +311,13 @@ tpm20_write_EfiSpecIdEventStruct(void)
  *
  * le: the log entry to build the digest in
  * sha1: the sha1 hash value to use
+ * bigEndian: whether to build in big endian format for the TPM or
+ *            little endian for the log
  *
  * Returns the digest size; -1 on fatal error
  */
 static int
-tpm20_build_digest(struct tpm_log_entry *le, const u8 *sha1)
+tpm20_build_digest(struct tpm_log_entry *le, const u8 *sha1, int bigEndian)
 {
     if (!tpm20_pcr_selection)
         return -1;
@@ -346,7 +348,11 @@ tpm20_build_digest(struct tpm_log_entry *le, const u8 *sha1)
             return -1;
         }
 
-        v->hashAlg = sel->hashAlg;
+        if (bigEndian)
+            v->hashAlg = sel->hashAlg;
+        else
+            v->hashAlg = be16_to_cpu(sel->hashAlg);
+
         memset(v->hash, 0, hsize);
         memcpy(v->hash, sha1, hsize > SHA1_BUFSIZE ? SHA1_BUFSIZE : hsize);
 
@@ -360,7 +366,10 @@ tpm20_build_digest(struct tpm_log_entry *le, const u8 *sha1)
     }
 
     struct tpm2_digest_values *v = (void*)le->hdr.digest;
-    v->count = cpu_to_be32(count);
+    if (bigEndian)
+        v->count = cpu_to_be32(count);
+    else
+        v->count = count;
 
     return dest - (void*)le->hdr.digest;
 }
@@ -374,13 +383,13 @@ tpm12_build_digest(struct tpm_log_entry *le, const u8 *sha1)
 }
 
 static int
-tpm_build_digest(struct tpm_log_entry *le, const u8 *sha1)
+tpm_build_digest(struct tpm_log_entry *le, const u8 *sha1, int bigEndian)
 {
     switch (TPM_version) {
     case TPM_VERSION_1_2:
         return tpm12_build_digest(le, sha1);
     case TPM_VERSION_2:
-        return tpm20_build_digest(le, sha1);
+        return tpm20_build_digest(le, sha1, bigEndian);
     }
     return -1;
 }
@@ -709,7 +718,7 @@ tpm_add_measurement_to_log(u32 pcrindex, u32 event_type,
         .hdr.pcrindex = pcrindex,
         .hdr.eventtype = event_type,
     };
-    int digest_len = tpm_build_digest(&le, hash);
+    int digest_len = tpm_build_digest(&le, hash, 1);
     if (digest_len < 0)
         return;
     int ret = tpm_extend(&le, digest_len);
@@ -717,6 +726,7 @@ tpm_add_measurement_to_log(u32 pcrindex, u32 event_type,
         tpm_set_failure();
         return;
     }
+    tpm_build_digest(&le, hash, 0);
     tpm_log_event(&le.hdr, digest_len, event, event_length);
 }
 
@@ -1249,7 +1259,7 @@ hash_log_extend(struct pcpes *pcpes, const void *hashdata, u32 hashdata_length
         .hdr.pcrindex = pcpes->pcrindex,
         .hdr.eventtype = pcpes->eventtype,
     };
-    int digest_len = tpm_build_digest(&le, pcpes->digest);
+    int digest_len = tpm_build_digest(&le, pcpes->digest, 1);
     if (digest_len < 0)
         return TCG_GENERAL_ERROR;
     if (extend) {
@@ -1257,6 +1267,7 @@ hash_log_extend(struct pcpes *pcpes, const void *hashdata, u32 hashdata_length
         if (ret)
             return TCG_TCG_COMMAND_ERROR;
     }
+    tpm_build_digest(&le, pcpes->digest, 0);
     int ret = tpm_log_event(&le.hdr, digest_len
                             , pcpes->event, pcpes->eventdatasize);
     if (ret)
