@@ -21,7 +21,7 @@
 static u16
 detect_serial(u16 port, u8 timeout, u8 count)
 {
-    if (CONFIG_DEBUG_SERIAL && port == CONFIG_DEBUG_SERIAL_PORT
+    if (CONFIG_DEBUG_SERIAL && port == (u16) CONFIG_DEBUG_SERIAL_PORT
         && !romfile_loadint("etc/advertise-serial-debug-port", 1))
         return 0;
     outb(0x02, port+SEROFF_IER);

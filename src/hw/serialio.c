@@ -17,6 +17,24 @@
 
 #define DEBUG_TIMEOUT 100000
 
+static void
+serial_outb(u8 val, u32 port, u8 offset){
+	if (port < 0x10000)
+		return outb(val, port + offset);
+	if (MODESEGMENT)
+		return;
+	writeb((void *)port + 4*offset, val);
+}
+
+static u8
+serial_inb(u32 port, u8 offset){
+	if (port < 0x10000)
+		return inb(port + offset);
+	if (MODESEGMENT)
+		return 0xff;
+	return readb((void *)port + 4*offset);
+}
+
 // Setup the debug serial port for output.
 void
 serial_debug_preinit(void)
@@ -25,12 +43,12 @@ serial_debug_preinit(void)
         return;
     // setup for serial logging: 8N1
     u8 oldparam, newparam = 0x03;
-    oldparam = inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LCR);
-    outb(newparam, CONFIG_DEBUG_SERIAL_PORT+SEROFF_LCR);
+    oldparam = serial_inb(CONFIG_DEBUG_SERIAL_PORT, SEROFF_LCR);
+    serial_outb(newparam, CONFIG_DEBUG_SERIAL_PORT, SEROFF_LCR);
     // Disable irqs
     u8 oldier, newier = 0;
-    oldier = inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_IER);
-    outb(newier, CONFIG_DEBUG_SERIAL_PORT+SEROFF_IER);
+    oldier = serial_inb(CONFIG_DEBUG_SERIAL_PORT, SEROFF_IER);
+    serial_outb(newier, CONFIG_DEBUG_SERIAL_PORT, SEROFF_IER);
 
     if (oldparam != newparam || oldier != newier)
         dprintf(1, "Changing serial settings was %x/%x now %x/%x\n"
@@ -44,11 +62,11 @@ serial_debug(char c)
     if (!CONFIG_DEBUG_SERIAL)
         return;
     int timeout = DEBUG_TIMEOUT;
-    while ((inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LSR) & 0x20) != 0x20)
+    while ((serial_inb(CONFIG_DEBUG_SERIAL_PORT, SEROFF_LSR) & 0x20) != 0x20)
         if (!timeout--)
             // Ran out of time.
             return;
-    outb(c, CONFIG_DEBUG_SERIAL_PORT+SEROFF_DATA);
+    serial_outb(c, CONFIG_DEBUG_SERIAL_PORT, SEROFF_DATA);
 }
 
 void
@@ -66,7 +84,7 @@ serial_debug_flush(void)
     if (!CONFIG_DEBUG_SERIAL)
         return;
     int timeout = DEBUG_TIMEOUT;
-    while ((inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LSR) & 0x60) != 0x60)
+    while ((serial_inb(CONFIG_DEBUG_SERIAL_PORT, SEROFF_LSR) & 0x60) != 0x60)
         if (!timeout--)
             // Ran out of time.
             return;
