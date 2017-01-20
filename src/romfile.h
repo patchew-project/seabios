@@ -9,6 +9,7 @@ struct romfile_s {
     char name[128];
     u32 size;
     int (*copy)(struct romfile_s *file, void *dest, u32 maxlen);
+    int (*write_back)(void *src, struct romfile_s *file, u32 maxlen);
 };
 void romfile_add(struct romfile_s *file);
 struct romfile_s *romfile_findprefix(const char *prefix, struct romfile_s *prev);

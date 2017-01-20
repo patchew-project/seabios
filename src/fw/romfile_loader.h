@@ -51,15 +51,32 @@ struct romfile_loader_entry_s {
             u32 cksum_length;
         };
 
+        /*
+         * COMMAND_ALLOCATE_RETURN_ADDR - allocate a table from @alloc_file
+         * subject to @alloc_ret_align alignment (must be power of 2)
+         * and @alloc_ret_zone (can be HIGH or FSEG) requirements.
+         * Additionally, return the address of the allocation in
+         * @addr_file.
+         *
+	 * This may be used instead of COMMAND_ALLOCATE
+         */
+        struct {
+            char alloc_ret_file[ROMFILE_LOADER_FILESZ];
+            u32 alloc_ret_align;
+            u8 alloc_ret_zone;
+            char alloc_ret_addr_file[ROMFILE_LOADER_FILESZ];
+        };
+
         /* padding */
         char pad[124];
     };
 };
 
 enum {
-    ROMFILE_LOADER_COMMAND_ALLOCATE     = 0x1,
-    ROMFILE_LOADER_COMMAND_ADD_POINTER  = 0x2,
-    ROMFILE_LOADER_COMMAND_ADD_CHECKSUM = 0x3,
+    ROMFILE_LOADER_COMMAND_ALLOCATE          = 0x1,
+    ROMFILE_LOADER_COMMAND_ADD_POINTER       = 0x2,
+    ROMFILE_LOADER_COMMAND_ADD_CHECKSUM      = 0x3,
+    ROMFILE_LOADER_COMMAND_ALLOCATE_RET_ADDR = 0x4,
 };
 
 enum {

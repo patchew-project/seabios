@@ -127,6 +127,38 @@ err:
     warn_internalerror();
 }
 
+static void romfile_loader_return_addr(struct romfile_loader_entry_s *entry,
+                                        struct romfile_loader_files *files)
+{
+    struct romfile_loader_file *alloc_file;
+    struct romfile_loader_file *addr_file;
+    u64 addr;
+    int ret;
+
+    alloc_file = romfile_loader_find(entry->alloc_ret_file, files);
+    addr_file = romfile_loader_find(entry->alloc_ret_addr_file, files);
+
+    if (!alloc_file || !addr_file || !alloc_file->data || !addr_file->data ||
+        addr_file->file->size < sizeof(addr))
+        goto err;
+
+    /* Get the address of the just-allocated file
+     * and stuff it in the address file */
+    memcpy(&addr, &alloc_file->data, sizeof(addr));
+    addr = cpu_to_le64(addr);
+    memcpy(addr_file->data, &addr, sizeof(addr));
+
+    if (!addr_file->file->write_back)
+        goto err;
+
+    ret = addr_file->file->write_back(&addr, addr_file->file, sizeof(addr));
+    if (ret != sizeof(addr))
+        goto err;
+    return;
+err:
+    warn_internalerror();
+}
+
 int romfile_loader_execute(const char *name)
 {
     struct romfile_loader_entry_s *entry;
@@ -161,6 +193,11 @@ int romfile_loader_execute(const char *name)
                         break;
                 case ROMFILE_LOADER_COMMAND_ADD_CHECKSUM:
                         romfile_loader_add_checksum(entry, files);
+                        break;
+                case ROMFILE_LOADER_COMMAND_ALLOCATE_RET_ADDR:
+                        romfile_loader_allocate(entry, files);
+                        romfile_loader_return_addr(entry, files);
+                        break;
                 default:
                         /* Skip commands that we don't recognize. */
                         break;

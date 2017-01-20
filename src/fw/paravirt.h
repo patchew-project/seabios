@@ -43,6 +43,7 @@ static inline int runningOnKVM(void) {
 #define QEMU_CFG_DMA_CTL_READ    0x02
 #define QEMU_CFG_DMA_CTL_SKIP    0x04
 #define QEMU_CFG_DMA_CTL_SELECT  0x08
+#define QEMU_CFG_DMA_CTL_WRITE   0x10
 
 // QEMU_CFG_DMA ID bit
 #define QEMU_CFG_VERSION_DMA    2

@@ -253,6 +253,20 @@ qemu_cfg_read(void *buf, int len)
 }
 
 static void
+qemu_cfg_write(void *buf, int len)
+{
+    if (len == 0) {
+        return;
+    }
+
+    if (qemu_cfg_dma_enabled()) {
+        qemu_cfg_dma_transfer(buf, len, QEMU_CFG_DMA_CTL_WRITE);
+    } else {
+        outsb(PORT_QEMU_CFG_DATA, buf, len);
+    }
+}
+
+static void
 qemu_cfg_skip(int len)
 {
     if (len == 0) {
@@ -280,6 +294,19 @@ qemu_cfg_read_entry(void *buf, int e, int len)
     }
 }
 
+static void
+qemu_cfg_write_entry(void *buf, int e, int len)
+{
+    if (qemu_cfg_dma_enabled()) {
+        u32 control = (e << 16) | QEMU_CFG_DMA_CTL_SELECT
+                        | QEMU_CFG_DMA_CTL_WRITE;
+        qemu_cfg_dma_transfer(buf, len, control);
+    } else {
+        qemu_cfg_select(e);
+        qemu_cfg_write(buf, len);
+    }
+}
+
 struct qemu_romfile_s {
     struct romfile_s file;
     int select, skip;
@@ -303,6 +330,24 @@ qemu_cfg_read_file(struct romfile_s *file, void *dst, u32 maxlen)
     return file->size;
 }
 
+static int
+qemu_cfg_write_file(void *src, struct romfile_s *file, u32 maxlen)
+{
+    if (file->size < maxlen)
+        return -1;
+    struct qemu_romfile_s *qfile;
+    qfile = container_of(file, struct qemu_romfile_s, file);
+    if (qfile->skip == 0) {
+        /* Do it in one transfer */
+        qemu_cfg_write_entry(src, qfile->select, file->size);
+    } else {
+        qemu_cfg_select(qfile->select);
+        qemu_cfg_skip(qfile->skip);
+        qemu_cfg_write(src, file->size);
+    }
+    return file->size;
+}
+
 static void
 qemu_romfile_add(char *name, int select, int skip, int size)
 {
@@ -317,6 +362,7 @@ qemu_romfile_add(char *name, int select, int skip, int size)
     qfile->select = select;
     qfile->skip = skip;
     qfile->file.copy = qemu_cfg_read_file;
+    qfile->file.write_back = qemu_cfg_write_file;
     romfile_add(&qfile->file);
 }
 
