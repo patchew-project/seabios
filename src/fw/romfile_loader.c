@@ -5,6 +5,7 @@
 #include "romfile.h" // struct romfile_s
 #include "malloc.h" // Zone*, _malloc
 #include "output.h" // warn_*
+#include "paravirt.h" // qemu_cfg_write_file
 
 struct romfile_loader_file {
     struct romfile_s *file;
@@ -98,7 +99,39 @@ static void romfile_loader_add_pointer(struct romfile_loader_entry_s *entry,
     pointer += (unsigned long)src_file->data;
     pointer = cpu_to_le64(pointer);
     memcpy(dest_file->data + offset, &pointer, entry->pointer_size);
+    return;
+err:
+    warn_internalerror();
+}
 
+static void romfile_loader_write_pointer(struct romfile_loader_entry_s *entry,
+                                       struct romfile_loader_files *files)
+{
+    struct romfile_s *dest_file;
+    struct romfile_loader_file *src_file;
+    unsigned offset = le32_to_cpu(entry->pointer_offset);
+    u64 pointer = 0;
+
+    /* Writing back to a file that may not be loaded in RAM */
+    dest_file = romfile_find(entry->pointer_dest_file);
+    src_file = romfile_loader_find(entry->pointer_src_file, files);
+
+    if (!dest_file || !src_file || !src_file->data ||
+        offset + entry->pointer_size < offset ||
+        offset + entry->pointer_size > dest_file->size ||
+        entry->pointer_size < 1 || entry->pointer_size > 8 ||
+        entry->pointer_size & (entry->pointer_size - 1)) {
+        goto err;
+    }
+
+    pointer = (unsigned long)src_file->data;
+    pointer = cpu_to_le64(pointer);
+
+    /* Only supported on QEMU */
+    if (qemu_cfg_write_file(&pointer, dest_file, offset,
+                            entry->pointer_size) != entry->pointer_size) {
+        goto err;
+    }
     return;
 err:
     warn_internalerror();
@@ -161,6 +194,10 @@ int romfile_loader_execute(const char *name)
                         break;
                 case ROMFILE_LOADER_COMMAND_ADD_CHECKSUM:
                         romfile_loader_add_checksum(entry, files);
+                        break;
+                case ROMFILE_LOADER_COMMAND_WRITE_POINTER:
+                        romfile_loader_write_pointer(entry, files);
+                        break;
                 default:
                         /* Skip commands that we don't recognize. */
                         break;

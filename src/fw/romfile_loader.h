@@ -25,10 +25,13 @@ struct romfile_loader_entry_s {
         };
 
         /*
-         * COMMAND_ADD_POINTER - patch the table (originating from
-         * @dest_file) at @pointer_offset, by adding a pointer to the table
+         * COMMAND_ADD_POINTER &
+         * COMMAND_WRITE_POINTER - patch memory (originating from
+         * @dest_file) at @pointer.offset, by adding a pointer to the memory
          * originating from @src_file. 1,2,4 or 8 byte unsigned
-         * addition is used depending on @pointer_size.
+         * addition is used depending on @pointer.size.
+         * Instead of patching memory, COMMAND_WRITE_POINTER writes the changes
+         * to @dest_file back to the host via DMA
          */
         struct {
             char pointer_dest_file[ROMFILE_LOADER_FILESZ];
@@ -57,9 +60,10 @@ struct romfile_loader_entry_s {
 };
 
 enum {
-    ROMFILE_LOADER_COMMAND_ALLOCATE     = 0x1,
-    ROMFILE_LOADER_COMMAND_ADD_POINTER  = 0x2,
-    ROMFILE_LOADER_COMMAND_ADD_CHECKSUM = 0x3,
+    ROMFILE_LOADER_COMMAND_ALLOCATE          = 0x1,
+    ROMFILE_LOADER_COMMAND_ADD_POINTER       = 0x2,
+    ROMFILE_LOADER_COMMAND_ADD_CHECKSUM      = 0x3,
+    ROMFILE_LOADER_COMMAND_WRITE_POINTER     = 0x4,
 };
 
 enum {
