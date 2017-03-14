@@ -220,6 +220,21 @@ qemu_cfg_select(u16 f)
     outw(f, PORT_QEMU_CFG_CTL);
 }
 
+static int
+qemu_cfg_check_signature(void)
+{
+    int i;
+    char *sig = "QEMU";
+
+    qemu_cfg_select(QEMU_CFG_SIGNATURE);
+    for (i = 0; i < 4; i++) {
+        if (inb(PORT_QEMU_CFG_DATA) != sig[i]) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static void
 qemu_cfg_dma_transfer(void *address, u32 length, u32 control)
 {
@@ -392,7 +407,9 @@ u16
 qemu_get_present_cpus_count(void)
 {
     u16 smp_count = 0;
-    qemu_cfg_read_entry(&smp_count, QEMU_CFG_NB_CPUS, sizeof(smp_count));
+    if (qemu_cfg_check_signature() == 0) {
+        qemu_cfg_read_entry(&smp_count, QEMU_CFG_NB_CPUS, sizeof(smp_count));
+    }
     u16 cmos_cpu_count = rtc_read(CMOS_BIOS_SMP_COUNT) + 1;
     if (smp_count < cmos_cpu_count) {
         smp_count = cmos_cpu_count;
@@ -563,12 +580,9 @@ void qemu_cfg_init(void)
         return;
 
     // Detect fw_cfg interface.
-    qemu_cfg_select(QEMU_CFG_SIGNATURE);
-    char *sig = "QEMU";
-    int i;
-    for (i = 0; i < 4; i++)
-        if (inb(PORT_QEMU_CFG_DATA) != sig[i])
-            return;
+    if (qemu_cfg_check_signature() != 0) {
+        return;
+    }
 
     dprintf(1, "Found QEMU fw_cfg\n");
 
