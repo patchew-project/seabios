@@ -376,6 +376,11 @@ clext_save_restore(int cmd, u16 seg, void *data)
     return stdvga_save_restore(cmd, seg, data);
 }
 
+int
+clext_get_linesize(struct vgamode_s *vmode_g)
+{
+    return DIV_ROUND_UP(vmode_g->width * vga_bpp(vmode_g), 8);
+}
 
 /****************************************************************
  * Mode setting

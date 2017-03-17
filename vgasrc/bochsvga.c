@@ -310,6 +310,11 @@ bochsvga_save_restore(int cmd, u16 seg, void *data)
     return ret + (VBE_DISPI_INDEX_Y_OFFSET-VBE_DISPI_INDEX_XRES+1)*sizeof(u16);
 }
 
+int
+bochsvga_get_linesize(struct vgamode_s *vmode_g)
+{
+    return DIV_ROUND_UP(vmode_g->width * vga_bpp(vmode_g), 8);
+}
 
 /****************************************************************
  * Mode setting

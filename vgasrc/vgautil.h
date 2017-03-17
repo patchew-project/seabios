@@ -17,6 +17,7 @@ int cbvga_get_dacformat(struct vgamode_s *vmode_g);
 int cbvga_set_dacformat(struct vgamode_s *vmode_g, int val);
 int cbvga_save_restore(int cmd, u16 seg, void *data);
 int cbvga_set_mode(struct vgamode_s *vmode_g, int flags);
+int cbvga_get_linesize(struct vgamode_s *vmode_g);
 int cbvga_setup(void);
 
 // clext.c
@@ -30,6 +31,7 @@ int clext_get_displaystart(struct vgamode_s *vmode_g);
 int clext_set_displaystart(struct vgamode_s *vmode_g, int val);
 int clext_save_restore(int cmd, u16 seg, void *data);
 int clext_set_mode(struct vgamode_s *vmode_g, int flags);
+int clext_get_linesize(struct vgamode_s *vmode_g);
 struct bregs;
 void clext_1012(struct bregs *regs);
 int clext_setup(void);
@@ -63,6 +65,7 @@ void stdvga_list_modes(u16 seg, u16 *dest, u16 *last);
 void stdvga_build_video_param(void);
 void stdvga_override_crtc(int mode, u8 *crtc);
 int stdvga_set_mode(struct vgamode_s *vmode_g, int flags);
+int stdvga_get_linesize(struct vgamode_s *vmode_g);
 void stdvga_set_packed_palette(void);
 
 // swcursor.c

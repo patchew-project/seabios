@@ -52,6 +52,7 @@ int bochsvga_get_dacformat(struct vgamode_s *vmode_g);
 int bochsvga_set_dacformat(struct vgamode_s *vmode_g, int val);
 int bochsvga_save_restore(int cmd, u16 seg, void *data);
 int bochsvga_set_mode(struct vgamode_s *vmode_g, int flags);
+int bochsvga_get_linesize(struct vgamode_s *vmode_g);
 int bochsvga_setup(void);
 
 #endif // bochsvga.h
