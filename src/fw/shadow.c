@@ -23,6 +23,7 @@
 
 union pamdata_u {
     u8 data8[8];
+    u16 data16[4];
     u32 data32[2];
 };
 
@@ -46,8 +47,9 @@ __make_bios_writable_intel(u16 bdf, u32 pam0)
     pam[0] = 0x30;
 
     // Write PAM settings back to pci config space
-    pci_config_writel(bdf, ALIGN_DOWN(pam0, 4), pamdata.data32[0]);
+    pci_config_writew(bdf, ALIGN_DOWN(pam0, 4) + 2, pamdata.data16[1]);
     pci_config_writel(bdf, ALIGN_DOWN(pam0, 4) + 4, pamdata.data32[1]);
+    pci_config_writeb(bdf, ALIGN_DOWN(pam0, 4) + 1, pamdata.data8[1]);
 
     if (!ram_present)
         // Copy bios.
@@ -107,8 +109,11 @@ make_bios_readonly_intel(u16 bdf, u32 pam0)
     pam[0] = 0x10;
 
     // Write PAM settings back to pci config space
-    pci_config_writel(bdf, ALIGN_DOWN(pam0, 4), pamdata.data32[0]);
-    pci_config_writel(bdf, ALIGN_DOWN(pam0, 4) + 4, pamdata.data32[1]);
+    pci_config_writew(bdf, ALIGN_DOWN(pam0, 4) + 2, pamdata.data16[1]);
+    pci_config_writew(bdf, ALIGN_DOWN(pam0, 4) + 4, pamdata.data16[2]);
+    pci_config_writeb(bdf, ALIGN_DOWN(pam0, 4) + 6, pamdata.data8[6]);
+    pci_config_writeb(bdf, ALIGN_DOWN(pam0, 4) + 7, pamdata.data8[7]);
+    pci_config_writeb(bdf, ALIGN_DOWN(pam0, 4) + 1, pamdata.data8[1]);
 }
 
 static int ShadowBDF = -1;
