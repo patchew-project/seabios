@@ -21,6 +21,10 @@ static u32 CBlinelength VAR16;
 
 struct vgamode_s *cbvga_find_mode(int mode)
 {
+    /* Assume VGA compatible hardware in text-mode. */
+    if (GET_GLOBAL(CBmode) == 0x3)
+        return stdvga_find_mode(mode);
+
     if (mode == GET_GLOBAL(CBmode))
         return &CBmodeinfo;
     if (mode == 0x03)
@@ -31,11 +35,11 @@ struct vgamode_s *cbvga_find_mode(int mode)
 void
 cbvga_list_modes(u16 seg, u16 *dest, u16 *last)
 {
-    if (dest<last) {
-        SET_FARVAR(seg, *dest, GET_GLOBAL(CBmode));
-        dest++;
+
+    /* Assume VGA compatible hardware in text-mode. */
+    if (GET_GLOBAL(CBmode) == 0x3) {
+        stdvga_list_modes(seg, dest, last);
     }
-    SET_FARVAR(seg, *dest, 0xffff);
 }
 
 int
@@ -98,6 +102,11 @@ int
 cbvga_set_mode(struct vgamode_s *vmode_g, int flags)
 {
     u8 emul = vmode_g == &CBemulinfo || GET_GLOBAL(CBmode) == 0x03;
+
+    /* Assume VGA compatible hardware in text-mode. */
+    if (GET_GLOBAL(CBmode) == 0x03)
+        return stdvga_set_mode(vmode_g, flags);
+
     MASK_BDA_EXT(flags, BF_EMULATE_TEXT, emul ? BF_EMULATE_TEXT : 0);
     if (!(flags & MF_NOCLEARMEM)) {
         if (GET_GLOBAL(CBmodeinfo.memmodel) == MM_TEXT) {
