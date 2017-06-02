@@ -57,6 +57,7 @@ static void romfile_loader_allocate(struct romfile_loader_entry_s *entry,
                                     struct romfile_loader_files *files)
 {
     struct zone_s *zone;
+    unsigned zone_req;
     struct romfile_loader_file *file = &files->files[files->nfiles];
     void *data;
     int ret;
@@ -65,7 +66,9 @@ static void romfile_loader_allocate(struct romfile_loader_entry_s *entry,
     if (alloc_align & (alloc_align - 1))
         goto err;
 
-    switch (entry->alloc.zone) {
+    zone_req = entry->alloc.zone;
+    zone_req &= ~(unsigned)ROMFILE_LOADER_ALLOC_CONTENT_NOACPI;
+    switch (zone_req) {
         case ROMFILE_LOADER_ALLOC_ZONE_HIGH:
             zone = &ZoneHigh;
             break;

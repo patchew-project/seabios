@@ -14,6 +14,8 @@ struct romfile_loader_entry_s {
          * COMMAND_ALLOCATE - allocate a table from @alloc.file
          * subject to @alloc.align alignment (must be power of 2)
          * and @alloc.zone (can be HIGH or FSEG) requirements.
+         * The most significant bit (bit 7) of @alloc.zone is used as a content
+         * hint for UEFI guest firmware, see ROMFILE_LOADER_ALLOC_CONTENT_*.
          *
          * Must appear exactly once for each file, and before
          * this file is referenced by any other command.
@@ -82,6 +84,11 @@ enum {
 enum {
     ROMFILE_LOADER_ALLOC_ZONE_HIGH = 0x1,
     ROMFILE_LOADER_ALLOC_ZONE_FSEG = 0x2,
+};
+
+enum {
+    ROMFILE_LOADER_ALLOC_CONTENT_MIXED  = 0x00,
+    ROMFILE_LOADER_ALLOC_CONTENT_NOACPI = 0x80,
 };
 
 int romfile_loader_execute(const char *name);
