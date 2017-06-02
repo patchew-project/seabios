@@ -70,6 +70,7 @@ static void romfile_loader_allocate(struct romfile_loader_entry_s *entry,
     zone_req &= ~(unsigned)ROMFILE_LOADER_ALLOC_CONTENT_NOACPI;
     switch (zone_req) {
         case ROMFILE_LOADER_ALLOC_ZONE_HIGH:
+        case ROMFILE_LOADER_ALLOC_ZONE_64BIT:
             zone = &ZoneHigh;
             break;
         case ROMFILE_LOADER_ALLOC_ZONE_FSEG:

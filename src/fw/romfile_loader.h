@@ -13,7 +13,7 @@ struct romfile_loader_entry_s {
         /*
          * COMMAND_ALLOCATE - allocate a table from @alloc.file
          * subject to @alloc.align alignment (must be power of 2)
-         * and @alloc.zone (can be HIGH or FSEG) requirements.
+         * and @alloc.zone (see ROMFILE_LOADER_ALLOC_ZONE_*) requirements.
          * The most significant bit (bit 7) of @alloc.zone is used as a content
          * hint for UEFI guest firmware, see ROMFILE_LOADER_ALLOC_CONTENT_*.
          *
@@ -82,8 +82,9 @@ enum {
 };
 
 enum {
-    ROMFILE_LOADER_ALLOC_ZONE_HIGH = 0x1,
-    ROMFILE_LOADER_ALLOC_ZONE_FSEG = 0x2,
+    ROMFILE_LOADER_ALLOC_ZONE_HIGH  = 0x1,
+    ROMFILE_LOADER_ALLOC_ZONE_FSEG  = 0x2,
+    ROMFILE_LOADER_ALLOC_ZONE_64BIT = 0x3,
 };
 
 enum {
