@@ -135,12 +135,14 @@ fail:
 
 static int
 virtio_scsi_scan_target(struct pci_device *pci, struct vp_device *vp,
-                        struct vring_virtqueue *vq, u16 target)
+                        struct vring_virtqueue *vq, u16 target, u8 report_luns)
 {
 
     struct virtio_lun_s vlun0;
 
     virtio_scsi_init_lun(&vlun0, pci, vp, vq, target, 0);
+    if (!report_luns)
+        return !virtio_scsi_add_lun(0, &vlun0.drive);
 
     int ret = scsi_rep_luns_scan(&vlun0.drive, virtio_scsi_add_lun);
     return ret < 0 ? 0 : ret;
@@ -185,9 +187,12 @@ init_virtio_scsi(void *data)
     status |= VIRTIO_CONFIG_S_DRIVER_OK;
     vp_set_status(vp, status);
 
-    int i, tot;
-    for (tot = 0, i = 0; i < 256; i++)
-        tot += virtio_scsi_scan_target(pci, vp, vq, i);
+    int tot = 0;
+    int i;
+    for (i = 0; i < 256; i++)
+        tot += virtio_scsi_scan_target(pci, vp, vq, i, 0);
+    for (i = 0; i < 256; i++)
+        tot += virtio_scsi_scan_target(pci, vp, vq, i, 1);
 
     if (!tot)
         goto fail;

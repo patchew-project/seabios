@@ -256,7 +256,7 @@ int scsi_rep_luns_scan(struct drive_s *tmp_drive, scsi_add_lun add_lun)
 
     for (i = 0, ret = 0; i < nluns; i++) {
         u64 lun = scsilun2u64(&resp->luns[i]);
-        if (lun >> 32)
+        if (lun >> 32 || !lun)
             continue;
         ret += !add_lun((u32)lun, tmp_drive);
     }
@@ -272,7 +272,7 @@ int scsi_sequential_scan(struct drive_s *tmp_drive, u32 maxluns,
     int ret;
     u32 lun;
 
-    for (lun = 0, ret = 0; lun < maxluns; lun++)
+    for (lun = 1, ret = 0; lun < maxluns; lun++)
         ret += !add_lun(lun, tmp_drive);
     return ret;
 }

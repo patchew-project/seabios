@@ -272,6 +272,7 @@ usb_uas_setup(struct usbdevice_s *usbdev)
 
     struct uasdrive_s lun0;
     uas_init_lun(&lun0, usbdev, command, status, data_in, data_out, 0);
+    uas_add_lun(0, &lun0.drive);
     int ret = scsi_rep_luns_scan(&lun0.drive, uas_add_lun);
     if (ret <= 0) {
         dprintf(1, "Unable to configure UAS drive.\n");

@@ -194,11 +194,15 @@ fail:
 }
 
 static void
-esp_scsi_scan_target(struct pci_device *pci, u32 iobase, u8 target)
+esp_scsi_scan_target(struct pci_device *pci, u32 iobase, u8 target, u8 report_luns)
 {
     struct esp_lun_s llun0;
 
     esp_scsi_init_lun(&llun0, pci, iobase, target, 0);
+    if (!report_luns) {
+        esp_scsi_add_lun(0, &llun0.drive);
+        return;
+    }
 
     scsi_rep_luns_scan(&llun0.drive, esp_scsi_add_lun);
 }
@@ -219,7 +223,9 @@ init_esp_scsi(void *data)
 
     int i;
     for (i = 0; i <= 7; i++)
-        esp_scsi_scan_target(pci, iobase, i);
+        esp_scsi_scan_target(pci, iobase, i, 0);
+    for (i = 0; i <= 7; i++)
+        esp_scsi_scan_target(pci, iobase, i, 1);
 }
 
 void
