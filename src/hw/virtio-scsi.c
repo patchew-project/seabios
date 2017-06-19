@@ -130,22 +130,40 @@ virtio_scsi_add_lun(u32 lun, struct drive_s *tmpl_drv)
 
 fail:
     free(vlun);
-    return -1;
+    return ret;
 }
 
 static int
 virtio_scsi_scan_target(struct pci_device *pci, struct vp_device *vp,
-                        struct vring_virtqueue *vq, u16 target, u8 report_luns)
+                        struct vring_virtqueue *vq, u16 target, u32 *targets,
+                        u8 report_luns)
 {
 
     struct virtio_lun_s vlun0;
 
     virtio_scsi_init_lun(&vlun0, pci, vp, vq, target, 0);
-    if (!report_luns)
-        return !virtio_scsi_add_lun(0, &vlun0.drive);
-
-    int ret = scsi_rep_luns_scan(&vlun0.drive, virtio_scsi_add_lun);
-    return ret < 0 ? 0 : ret;
+    dprintf(3, "scanning target %d, pass %d\n", target, report_luns);
+    if (!report_luns) {
+        int ret = virtio_scsi_add_lun(0, &vlun0.drive);
+        if (ret > 0) {
+           /* Target error */
+           return 0;
+        }
+        /* Found a SCSI device (maybe not a disk if ret < 0).  Search higher
+         * LUNs in the second pass.
+         */
+        dprintf(1, "will scan target %d\n", target);
+        targets[target >> 5] |= 1 << (target & 31);
+        return !ret;
+    } else {
+        int ret = 0;
+        if (targets[target >> 5] & (1 << (target & 31))) {
+            ret = scsi_rep_luns_scan(&vlun0.drive, virtio_scsi_add_lun);
+            if (ret < 0)
+               ret = 0;
+        }
+        return ret;
+    }
 }
 
 static void
@@ -188,11 +206,18 @@ init_virtio_scsi(void *data)
     vp_set_status(vp, status);
 
     int tot = 0;
+    u32 targets[256 / 32];
     int i;
+    memset(targets, 0, sizeof(targets));
     for (i = 0; i < 256; i++)
-        tot += virtio_scsi_scan_target(pci, vp, vq, i, 0);
-    for (i = 0; i < 256; i++)
-        tot += virtio_scsi_scan_target(pci, vp, vq, i, 1);
+        tot += virtio_scsi_scan_target(pci, vp, vq, i, targets, 0);
+    for (i = 0; i < 256; i++) {
+        if (!targets[i >> 5]) {
+            i |= 31;
+            continue;
+        }
+        tot += virtio_scsi_scan_target(pci, vp, vq, i, targets, 1);
+    }
 
     if (!tot)
         goto fail;

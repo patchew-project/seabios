@@ -278,6 +278,8 @@ int scsi_sequential_scan(struct drive_s *tmp_drive, u32 maxluns,
 }
 
 // Validate drive, find block size / sector count, and register drive.
+// Return positive value if disk error, 0 if success, negative if
+// not a disk or the disk parameters are invalid.
 int
 scsi_drive_setup(struct drive_s *drive, const char *s, int prio)
 {
