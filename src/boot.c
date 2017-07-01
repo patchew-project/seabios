@@ -527,16 +527,16 @@ interactive_bootmenu(void)
 struct bev_s {
     int type;
     u32 vector;
+    // Applicable to hard disks only
+    int hdid;
 };
 static struct bev_s BEV[20];
 static int BEVCount;
 static int HaveHDBoot, HaveFDBoot;
 
 static void
-add_bev(int type, u32 vector)
+add_bev(int type, u32 vector, int hdid)
 {
-    if (type == IPL_TYPE_HARDDISK && HaveHDBoot++)
-        return;
     if (type == IPL_TYPE_FLOPPY && HaveFDBoot++)
         return;
     if (BEVCount >= ARRAY_SIZE(BEV))
@@ -544,12 +544,15 @@ add_bev(int type, u32 vector)
     struct bev_s *bev = &BEV[BEVCount++];
     bev->type = type;
     bev->vector = vector;
+    bev->hdid = hdid;
 }
+
 
 // Prepare for boot - show menu and run bcvs.
 void
 bcv_prepboot(void)
 {
+    int hdid = -1;
     if (! CONFIG_BOOT)
         return;
 
@@ -563,28 +566,30 @@ bcv_prepboot(void)
         switch (pos->type) {
         case IPL_TYPE_BCV:
             call_bcv(pos->vector.seg, pos->vector.offset);
-            add_bev(IPL_TYPE_HARDDISK, 0);
+            add_bev(IPL_TYPE_HARDDISK, 0, -1);
             break;
         case IPL_TYPE_FLOPPY:
             map_floppy_drive(pos->drive);
-            add_bev(IPL_TYPE_FLOPPY, 0);
+            add_bev(IPL_TYPE_FLOPPY, 0, -1);
             break;
         case IPL_TYPE_HARDDISK:
-            map_hd_drive(pos->drive);
-            add_bev(IPL_TYPE_HARDDISK, 0);
+            hdid = map_hd_drive(pos->drive);
+            add_bev(IPL_TYPE_HARDDISK, 0, hdid);
+            HaveHDBoot++;
             break;
         case IPL_TYPE_CDROM:
             map_cd_drive(pos->drive);
             // NO BREAK
         default:
-            add_bev(pos->type, pos->data);
+            add_bev(pos->type, pos->data, -1);
             break;
         }
     }
 
     // If nothing added a floppy/hd boot - add it manually.
-    add_bev(IPL_TYPE_FLOPPY, 0);
-    add_bev(IPL_TYPE_HARDDISK, 0);
+    add_bev(IPL_TYPE_FLOPPY, 0, -1);
+    if (HaveHDBoot == 0)
+      add_bev(IPL_TYPE_HARDDISK, 0, -1);
 }
 
 
@@ -731,7 +736,10 @@ do_boot(int seq_nr)
         break;
     case IPL_TYPE_HARDDISK:
         printf("Booting from Hard Disk...\n");
-        boot_disk(0x80, 1);
+        if (ie->hdid == -1)
+          boot_disk(0x80 , 1);
+        else
+          boot_disk(0x80 + ie->hdid, 1);
         break;
     case IPL_TYPE_CDROM:
         boot_cdrom((void*)ie->vector);

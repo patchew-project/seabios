@@ -238,7 +238,7 @@ add_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive)
 }
 
 // Map a hard drive
-void
+int
 map_hd_drive(struct drive_s *drive)
 {
     ASSERT32FLAT();
@@ -252,6 +252,7 @@ map_hd_drive(struct drive_s *drive)
 
     // Fill "fdpt" structure.
     fill_fdpt(drive, hdid);
+    return hdid;
 }
 
 // Map a cd
