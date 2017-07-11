@@ -10,7 +10,7 @@
 
 struct disk_op_s {
     void *buf_fl;
-    struct drive_s *drive_gf;
+    struct drive_s *drive_fl;
     u8 command;
     u16 count;
     union {
