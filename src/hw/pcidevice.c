@@ -158,6 +158,30 @@ u8 pci_find_capability(struct pci_device *pci, u8 cap_id, u8 cap)
     return 0;
 }
 
+u8 pci_find_capability_bdf(int bdf, u8 cap_id, u8 cap)
+{
+    int i;
+    u16 status = pci_config_readw(bdf, PCI_STATUS);
+
+    if (!(status & PCI_STATUS_CAP_LIST))
+        return 0;
+
+    if (cap == 0) {
+        /* find first */
+        cap = pci_config_readb(bdf, PCI_CAPABILITY_LIST);
+    } else {
+        /* find next */
+        cap = pci_config_readb(bdf, cap + PCI_CAP_LIST_NEXT);
+    }
+    for (i = 0; cap && i <= 0xff; i++) {
+        if (pci_config_readb(bdf, cap + PCI_CAP_LIST_ID) == cap_id)
+            return cap;
+        cap = pci_config_readb(bdf, cap + PCI_CAP_LIST_NEXT);
+    }
+
+    return 0;
+}
+
 // Enable PCI bus-mastering (ie, DMA) support on a pci device
 void
 pci_enable_busmaster(struct pci_device *pci)

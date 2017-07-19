@@ -70,6 +70,7 @@ int pci_init_device(const struct pci_device_id *ids
 struct pci_device *pci_find_init_device(const struct pci_device_id *ids
                                         , void *arg);
 u8 pci_find_capability(struct pci_device *pci, u8 cap_id, u8 cap);
+u8 pci_find_capability_bdf(int bdf, u8 cap_id, u8 cap);
 void pci_enable_busmaster(struct pci_device *pci);
 u16 pci_enable_iobar(struct pci_device *pci, u32 addr);
 void *pci_enable_membar(struct pci_device *pci, u32 addr);
