@@ -578,9 +578,17 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
         pci_bios_init_bus_rec(secbus, pci_bus);
 
         if (subbus != *pci_bus) {
+            u16 vendor = pci_config_readw(bdf, PCI_VENDOR_ID);
+            u8 res_bus = 0;
+            if (vendor == 0x1b36) {
+                u8 cap = pci_find_capability_bdf(bdf, PCI_CAP_ID_VNDR, 0);
+                if (cap) {
+                    res_bus = pci_config_readb(bdf, cap + 16);
+                }
+            }
             dprintf(1, "PCI: subordinate bus = 0x%x -> 0x%x\n",
-                    subbus, *pci_bus);
-            subbus = *pci_bus;
+                    subbus, *pci_bus + res_bus);
+            subbus = *pci_bus + res_bus;
         } else {
             dprintf(1, "PCI: subordinate bus = 0x%x\n", subbus);
         }
