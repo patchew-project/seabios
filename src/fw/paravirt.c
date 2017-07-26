@@ -25,6 +25,7 @@
 #include "x86.h" // cpuid
 #include "xen.h" // xen_biostable_setup
 #include "stacks.h" // yield
+#include "std/acpi.h"
 
 // Amount of continuous ram under 4Gig
 u32 RamSize;
@@ -147,6 +148,50 @@ static void msr_feature_control_setup(void)
         wrmsr_smp(MSR_IA32_FEATURE_CONTROL, feature_control_bits);
 }
 
+static void
+build_compatibility_rsdt(void)
+{
+    if (RsdpAddr->rsdt_physical_address)
+        return;
+
+    u64 xsdt_addr = RsdpAddr->xsdt_physical_address;
+    if (xsdt_addr & ~0xffffffffULL)
+        return;
+
+    struct xsdt_descriptor_rev1 *xsdt = (void*)(u32)xsdt_addr;
+    void *end = (void*)xsdt + xsdt->length;
+    struct rsdt_descriptor_rev1 *rsdt;
+    int rsdt_size = offsetof(struct rsdt_descriptor_rev1, table_offset_entry[0]);
+    int i;
+    for (i=0; (void*)&xsdt->table_offset_entry[i] < end; i++) {
+        u64 tbl_addr = xsdt->table_offset_entry[i];
+        if (!tbl_addr || (tbl_addr & ~0xffffffffULL))
+            continue;
+        rsdt_size += 4;
+    }
+
+    rsdt = malloc_high(rsdt_size);
+    RsdpAddr->rsdt_physical_address = (u32)rsdt;
+    RsdpAddr->checksum -= checksum(RsdpAddr,
+				   offsetof(struct rsdp_descriptor, length));
+    RsdpAddr->extended_checksum -= checksum(RsdpAddr,
+					    sizeof(struct rsdp_descriptor));
+
+    memcpy(rsdt, xsdt, sizeof(struct acpi_table_header));
+    rsdt->signature = RSDT_SIGNATURE;
+    rsdt->length = rsdt_size;
+    rsdt->revision = 1;
+    int j;
+    for (i=j=0; (void*)&xsdt->table_offset_entry[i] < end; i++) {
+        u64 tbl_addr = xsdt->table_offset_entry[i];
+        if (!tbl_addr || (tbl_addr & ~0xffffffffULL))
+            continue;
+        rsdt->table_offset_entry[j++] = (u32)tbl_addr;
+    }
+
+    rsdt->checksum -= checksum(rsdt, rsdt_size);
+}
+
 void
 qemu_platform_setup(void)
 {
@@ -186,8 +231,10 @@ qemu_platform_setup(void)
 
         RsdpAddr = find_acpi_rsdp();
 
-        if (RsdpAddr)
+        if (RsdpAddr) {
+            build_compatibility_rsdt();
             return;
+        }
 
         /* If present, loader should have installed an RSDP.
          * Not installed? We might still be able to continue
