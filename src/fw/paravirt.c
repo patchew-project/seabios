@@ -148,6 +148,20 @@ static void msr_feature_control_setup(void)
         wrmsr_smp(MSR_IA32_FEATURE_CONTROL, feature_control_bits);
 }
 
+static void*
+build_rev1_fadt(struct fadt_descriptor_rev1 *fadt_v3)
+{
+    struct fadt_descriptor_rev1 *fadt_v1 = malloc_high(sizeof *fadt_v1);
+
+    memcpy(fadt_v1, fadt_v3, sizeof *fadt_v1);
+    fadt_v1->length = sizeof *fadt_v1;
+    fadt_v1->revision = 1;
+    // the upper 23 bits are reserved in the rev1 FADT
+    fadt_v1->flags &= 0x1ff;
+    fadt_v1->checksum -= checksum(fadt_v1, fadt_v1->length);
+    return fadt_v1;
+}
+
 static void
 build_compatibility_rsdt(void)
 {
@@ -186,6 +200,11 @@ build_compatibility_rsdt(void)
         u64 tbl_addr = xsdt->table_offset_entry[i];
         if (!tbl_addr || (tbl_addr & ~0xffffffffULL))
             continue;
+        struct acpi_table_header *tbl = (void*)(u32)tbl_addr;
+        // for compatibility with Windows 2000, the RSDT should contain
+        // an ACPI 1.0 FADT (table revision 1)
+        if (tbl->signature == FACP_SIGNATURE && tbl->revision > 1)
+            tbl_addr = (u32)build_rev1_fadt((void *)tbl);
         rsdt->table_offset_entry[j++] = (u32)tbl_addr;
     }
 
