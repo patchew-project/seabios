@@ -122,6 +122,8 @@ extern void __force_link_error__only_in_16bit(void) __noreturn;
             typeof(divisor) __divisor = divisor;        \
             (((x) + ((__divisor) / 2)) / (__divisor));  \
         })
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define ALIGN(x,a)              __ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)    (((x)+(mask))&~(mask))
 #define ALIGN_DOWN(x,a)         ((x) & ~((typeof(x))(a)-1))

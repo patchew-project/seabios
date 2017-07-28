@@ -15,6 +15,7 @@
 #include "hw/pcidevice.h" // pci_probe_devices
 #include "hw/pci_ids.h" // PCI_VENDOR_ID_INTEL
 #include "hw/pci_regs.h" // PCI_COMMAND
+#include "fw/dev-pci.h" // qemu_pci_cap
 #include "list.h" // struct hlist_node
 #include "malloc.h" // free
 #include "output.h" // dprintf
@@ -578,9 +579,41 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
         pci_bios_init_bus_rec(secbus, pci_bus);
 
         if (subbus != *pci_bus) {
+            u8 res_bus = 0;
+            if (pci_config_readw(bdf, PCI_VENDOR_ID) == PCI_VENDOR_ID_REDHAT &&
+                    pci_config_readw(bdf, PCI_DEVICE_ID) ==
+                            PCI_DEVICE_ID_REDHAT_ROOT_PORT) {
+                u8 cap;
+                do {
+                    cap = pci_find_capability(bdf, PCI_CAP_ID_VNDR, 0);
+                } while (cap &&
+                         pci_config_readb(bdf, cap + PCI_CAP_VNDR_SPEC_TYPE) !=
+                                REDHAT_CAP_TYPE_QEMU);
+                if (cap) {
+                    u8 cap_len = pci_config_readb(bdf, cap + PCI_CAP_FLAGS);
+                    if (cap_len != QEMU_PCI_CAP_SIZE) {
+                        dprintf(1, "PCI: QEMU cap length %d is invalid\n",
+                                cap_len);
+                    } else {
+                        res_bus = pci_config_readb(bdf,
+                                                   cap + QEMU_PCI_CAP_BUS_RES);
+                        if ((u8)(res_bus + secbus) < secbus ||
+                            (u8)(res_bus + secbus) < res_bus) {
+                            dprintf(1, "PCI: bus_reserve value %d is invalid\n",
+                                    res_bus);
+                            res_bus = 0;
+                        } else {
+                            dprintf(1, "PCI: QEMU cap is found, value = %u\n",
+                                    res_bus);
+                        }
+                    }
+                }
+                res_bus = MAX(*pci_bus, secbus + res_bus);
+            }
             dprintf(1, "PCI: subordinate bus = 0x%x -> 0x%x\n",
-                    subbus, *pci_bus);
-            subbus = *pci_bus;
+                    subbus, res_bus);
+            subbus = res_bus;
+            *pci_bus = res_bus;
         } else {
             dprintf(1, "PCI: subordinate bus = 0x%x\n", subbus);
         }
