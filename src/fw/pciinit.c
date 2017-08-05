@@ -15,6 +15,7 @@
 #include "hw/pcidevice.h" // pci_probe_devices
 #include "hw/pci_ids.h" // PCI_VENDOR_ID_INTEL
 #include "hw/pci_regs.h" // PCI_COMMAND
+#include "fw/dev-pci.h" // qemu_pci_cap
 #include "list.h" // struct hlist_node
 #include "malloc.h" // free
 #include "output.h" // dprintf
@@ -578,9 +579,42 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
         pci_bios_init_bus_rec(secbus, pci_bus);
 
         if (subbus != *pci_bus) {
+            u8 res_bus = 0;
+            if (pci_config_readw(bdf, PCI_VENDOR_ID) == PCI_VENDOR_ID_REDHAT &&
+                    pci_config_readw(bdf, PCI_DEVICE_ID) ==
+                            PCI_DEVICE_ID_REDHAT_ROOT_PORT) {
+                u8 cap;
+                do {
+                    cap = pci_find_capability(bdf, PCI_CAP_ID_VNDR, 0);
+                } while (cap &&
+                         pci_config_readb(bdf, cap + PCI_CAP_REDHAT_TYPE) !=
+                                REDHAT_CAP_TYPE_QEMU);
+                if (cap) {
+                    u8 cap_len = pci_config_readb(bdf, cap + PCI_CAP_FLAGS);
+                    if (cap_len != QEMU_PCI_CAP_SIZE) {
+                        dprintf(1, "PCI: QEMU cap length %d is invalid\n",
+                                cap_len);
+                    } else {
+                        u32 tmp_res_bus = pci_config_readl(bdf,
+                                                   cap + QEMU_PCI_CAP_BUS_RES);
+                        if (tmp_res_bus != (u32)-1) {
+                            res_bus = tmp_res_bus & 0xFF;
+                            if ((u8)(res_bus + secbus) < secbus ||
+                                (u8)(res_bus + secbus) < res_bus) {
+                                dprintf(1, "PCI: bus_reserve value %d is invalid\n",
+                                        res_bus);
+                                res_bus = 0;
+                            }
+                        }
+                    }
+                }
+                res_bus = (*pci_bus > secbus + res_bus) ? *pci_bus
+                                                      : secbus + res_bus;
+            }
             dprintf(1, "PCI: subordinate bus = 0x%x -> 0x%x\n",
-                    subbus, *pci_bus);
-            subbus = *pci_bus;
+                    subbus, res_bus);
+            subbus = res_bus;
+            *pci_bus = res_bus;
         } else {
             dprintf(1, "PCI: subordinate bus = 0x%x\n", subbus);
         }
@@ -951,11 +985,38 @@ pci_region_map_one_entry(struct pci_region_entry *entry, u64 addr)
 
     u16 bdf = entry->dev->bdf;
     u64 limit = addr + entry->size - 1;
+
+    if (pci_config_readw(bdf, PCI_VENDOR_ID) == PCI_VENDOR_ID_REDHAT &&
+            pci_config_readw(bdf, PCI_DEVICE_ID) ==
+                    PCI_DEVICE_ID_REDHAT_ROOT_PORT) {
+        u8 cap;
+        do {
+            cap = pci_find_capability(bdf, PCI_CAP_ID_VNDR, 0);
+        } while (cap &&
+                 pci_config_readb(bdf, cap + PCI_CAP_REDHAT_TYPE) !=
+                        REDHAT_CAP_TYPE_QEMU);
+        if (cap) {
+            u8 cap_len = pci_config_readb(bdf, cap + PCI_CAP_FLAGS);
+            if (cap_len != QEMU_PCI_CAP_SIZE) {
+                dprintf(1, "PCI: QEMU cap length %d is invalid\n",
+                        cap_len);
+            } else {
+                u32 offset = cap + QEMU_PCI_CAP_LIMITS_OFFSET + entry->type * 8;
+                u64 tmp_limit = (pci_config_readl(bdf, offset) |
+                            (u64)pci_config_readl(bdf, offset + 4) << 32);
+                if (tmp_limit != (u64)-1) {
+                    tmp_limit += addr - 1;
+                    limit = (limit > tmp_limit) ? limit : tmp_limit;
+                }
+            }
+        }
+    }
+
     if (entry->type == PCI_REGION_TYPE_IO) {
         pci_config_writeb(bdf, PCI_IO_BASE, addr >> PCI_IO_SHIFT);
-        pci_config_writew(bdf, PCI_IO_BASE_UPPER16, 0);
+        pci_config_writew(bdf, PCI_IO_BASE_UPPER16, limit >> 16);
         pci_config_writeb(bdf, PCI_IO_LIMIT, limit >> PCI_IO_SHIFT);
-        pci_config_writew(bdf, PCI_IO_LIMIT_UPPER16, 0);
+        pci_config_writew(bdf, PCI_IO_LIMIT_UPPER16, limit >> 16);
     }
     if (entry->type == PCI_REGION_TYPE_MEM) {
         pci_config_writew(bdf, PCI_MEMORY_BASE, addr >> PCI_MEMORY_SHIFT);
