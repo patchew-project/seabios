@@ -38,7 +38,7 @@
 #define PCI_CAP_REDHAT_TYPE_OFFSET  3
 
 /* List of valid Red Hat vendor-specific capability types */
-#define REDHAT_CAP_RESOURCE_RESERVE    1
+#define REDHAT_CAP_RESOURCE_RESERVE 1
 
 
 /* Offsets of RESOURCE_RESERVE capability fields */
