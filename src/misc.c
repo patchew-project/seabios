@@ -11,6 +11,7 @@
 #include "output.h" // debug_enter
 #include "stacks.h" // call16_int
 #include "string.h" // memset
+#include "util.h" // serial_10
 
 #define PORT_MATH_CLEAR        0x00f0
 
@@ -57,6 +58,7 @@ handle_10(struct bregs *regs)
 {
     debug_enter(regs, DEBUG_HDL_10);
     // don't do anything, since the VGA BIOS handles int10h requests
+    sercon_10(regs);
 }
 
 // NMI handler
