@@ -414,6 +414,52 @@ __csm_return:
         popfw
         lretw
 
+// Serial console "hooked vga" entry point
+        DECLFUNC entry_sercon
+entry_sercon:
+        // Setup for chain loading to real vga handler
+        pushfw
+        pushl %cs:sercon_real_vga_handler
+
+        // Set %ds to varlow segment
+        cli
+        cld
+        pushw %ds
+        pushl %eax
+        movl $_zonelow_seg, %eax
+        movl %eax, %ds
+
+        // Test if the sercon handler can be called
+        movl %esp, %eax         // Test for broken x86emu
+        pushl $1f
+        retl
+1:      cmpl %esp, %eax
+        jne 4f
+        cmpb $0, sercon_enable  // Test that sercon is enabled
+        je 3f
+
+2:      popl %eax
+        popw %ds
+        pushl $sercon_10_splitmode
+#if CONFIG_ENTRY_EXTRASTACK
+        jmp irqentry_arg_extrastack
+#else
+        jmp irqentry_arg
+#endif
+
+        // sercon disabled - verify not 0x03 modeset and otherwise exit
+3:      popl %eax
+        cmpw $0x0003, %ax
+        jne 5f
+        pushl %eax
+        jmp 2b
+
+        // Running on broken x86emu - restore stack and exit
+4:      movl %eax, %esp
+        popl %eax
+5:      popw %ds
+        iretw
+
 
 /****************************************************************
  * Interrupt entry points
