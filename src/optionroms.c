@@ -12,6 +12,7 @@
 #include "hw/pcidevice.h" // foreachpci
 #include "hw/pci_ids.h" // PCI_CLASS_DISPLAY_VGA
 #include "hw/pci_regs.h" // PCI_ROM_ADDRESS
+#include "hw/serialio.h" // PORT_SERIAL1
 #include "malloc.h" // rom_confirm
 #include "output.h" // dprintf
 #include "romfile.h" // romfile_loadint
@@ -404,6 +405,8 @@ struct rom_header *VgaROM;
 void
 vgarom_setup(void)
 {
+    u16 ret, iobase = 0;
+
     if (! CONFIG_OPTIONROMS)
         return;
 
@@ -432,11 +435,22 @@ vgarom_setup(void)
     run_file_roms("vgaroms/", 1, NULL);
     rom_reserve(0);
 
-    if (rom_get_last() == BUILD_ROM_START)
+    ret = romfile_loadint("etc/sercon-enable", 0);
+    if (ret)
+        iobase = PORT_SERIAL1;
+
+    if (rom_get_last() == BUILD_ROM_START) {
         // No VGA rom found
+        if (iobase) {
+            sercon_setup(iobase);
+            enable_vga_console();
+        }
         return;
+    }
 
     VgaROM = (void*)BUILD_ROM_START;
+    if (iobase)
+        sercon_setup(iobase);
     enable_vga_console();
 }
 

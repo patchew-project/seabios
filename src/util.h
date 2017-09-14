@@ -234,6 +234,9 @@ void code_mutable_preinit(void);
 // serial.c
 void serial_setup(void);
 void lpt_setup(void);
+void sercon_10(struct bregs *regs);
+void sercon_setup(u16 iobase);
+void sercon_check_event(void);
 
 // version.c
 extern const char VERSION[], BUILDINFO[];
