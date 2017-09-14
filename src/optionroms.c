@@ -438,6 +438,9 @@ vgarom_setup(void)
     ret = romfile_loadint("etc/sercon-enable", 0);
     if (ret)
         iobase = PORT_SERIAL1;
+    ret = romfile_loadint("etc/sercon-iobase", 0);
+    if (ret)
+        iobase = ret;
 
     if (rom_get_last() == BUILD_ROM_START) {
         // No VGA rom found
