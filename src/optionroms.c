@@ -24,6 +24,7 @@
 #include "tcgbios.h" // tpm_*
 
 static int EnforceChecksum, S3ResumeVga, RunPCIroms;
+static int sgabios;
 
 
 /****************************************************************
@@ -194,6 +195,12 @@ run_file_roms(const char *prefix, int isvga, u64 *sources)
         file = romfile_findprefix(prefix, file);
         if (!file)
             break;
+        if (strcmp(file->name, "vgaroms/sgabios.bin") == 0) {
+            dprintf(1, "sgabios.bin found -> ignoring, enabling sercon instead.\n");
+            dprintf(1, "hint: use '-machine graphics=no' instead of '-device sga'.\n");
+            sgabios++;
+            continue;
+        }
         struct rom_header *rom = deploy_romfile(file);
         if (rom) {
             setRomSource(sources, rom, (u32)file);
@@ -435,6 +442,8 @@ vgarom_setup(void)
     run_file_roms("vgaroms/", 1, NULL);
     rom_reserve(0);
 
+    if (sgabios)
+        iobase = PORT_SERIAL1;
     ret = romfile_loadint("etc/sercon-enable", 0);
     if (ret)
         iobase = PORT_SERIAL1;
