@@ -12,6 +12,7 @@
 #include "hw/pcidevice.h" // foreachpci
 #include "hw/pci_ids.h" // PCI_CLASS_DISPLAY_VGA
 #include "hw/pci_regs.h" // PCI_ROM_ADDRESS
+#include "hw/serialio.h" // PORT_SERIAL1
 #include "malloc.h" // rom_confirm
 #include "output.h" // dprintf
 #include "romfile.h" // romfile_loadint
@@ -193,6 +194,12 @@ run_file_roms(const char *prefix, int isvga, u64 *sources)
         file = romfile_findprefix(prefix, file);
         if (!file)
             break;
+        if (strcmp(file->name, "vgaroms/sgabios.bin") == 0) {
+            dprintf(1, "sgabios.bin found -> ignoring, enabling sercon instead.\n");
+            dprintf(1, "hint: use '-machine graphics=no' instead of '-device sga'.\n");
+            const_romfile_add_int("etc/sercon-port", PORT_SERIAL1);
+            continue;
+        }
         struct rom_header *rom = deploy_romfile(file);
         if (rom) {
             setRomSource(sources, rom, (u32)file);
