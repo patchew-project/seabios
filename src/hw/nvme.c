@@ -20,6 +20,8 @@
 #include "nvme.h"
 #include "nvme-int.h"
 
+#define min(a, b) ({ typeof(a) _a = a; typeof(b) _b = b; _a < _b ? _a : _b; })
+
 static void *
 zalloc_page_aligned(struct zone_s *zone, u32 size)
 {
@@ -318,8 +320,10 @@ nvme_create_io_cq(struct nvme_ctrl *ctrl, struct nvme_cq *cq, u16 q_idx)
 {
     int rc;
     struct nvme_sqe *cmd_create_cq;
+    u16 length;
 
-    rc = nvme_init_cq(ctrl, cq, q_idx, NVME_PAGE_SIZE / sizeof(struct nvme_cqe));
+    length = min(1 + (ctrl->reg->cap & 0xffff), NVME_PAGE_SIZE / sizeof(struct nvme_cqe));
+    rc = nvme_init_cq(ctrl, cq, q_idx, length);
     if (rc) {
         goto err;
     }
@@ -359,8 +363,10 @@ nvme_create_io_sq(struct nvme_ctrl *ctrl, struct nvme_sq *sq, u16 q_idx, struct 
 {
     int rc;
     struct nvme_sqe *cmd_create_sq;
+    u16 length;
 
-    rc = nvme_init_sq(ctrl, sq, q_idx, NVME_PAGE_SIZE / sizeof(struct nvme_cqe), cq);
+    length = min(1 + (ctrl->reg->cap & 0xffff), NVME_PAGE_SIZE / sizeof(struct nvme_cqe));
+    rc = nvme_init_sq(ctrl, sq, q_idx, length, cq);
     if (rc) {
         goto err;
     }
