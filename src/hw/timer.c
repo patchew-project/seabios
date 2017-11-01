@@ -213,6 +213,8 @@ timer_calc(u32 msecs)
 u32
 timer_calc_usec(u32 usecs)
 {
+    if (usecs > 1000000)
+        return timer_calc(usecs / 1000);
     return timer_read() + DIV_ROUND_UP(GET_GLOBAL(TimerKHz) * usecs, 1000);
 }
 
