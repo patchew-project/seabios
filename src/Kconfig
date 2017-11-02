@@ -534,6 +534,7 @@ menu "Debugging"
     config DEBUG_SERIAL
         depends on DEBUG_LEVEL != 0
         bool "Serial port debugging"
+        depends on !SERCON
         default n
         help
             Send debugging information to serial port.
