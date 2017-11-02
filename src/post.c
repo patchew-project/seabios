@@ -147,6 +147,7 @@ platform_hardware_setup(void)
 
     // Platform specific setup
     qemu_platform_setup();
+    kvmtool_platform_setup();
     coreboot_platform_setup();
 
     // Setup timers and periodic clock interrupt
@@ -307,6 +308,7 @@ dopost(void)
 
     // Detect ram and setup internal malloc.
     qemu_preinit();
+    kvmtool_preinit();
     coreboot_preinit();
     malloc_preinit();
 
@@ -320,7 +322,7 @@ dopost(void)
 void VISIBLE32FLAT
 handle_post(void)
 {
-    if (!CONFIG_QEMU && !CONFIG_COREBOOT)
+    if (!CONFIG_QEMU && !CONFIG_COREBOOT && !CONFIG_KVMTOOL)
         return;
 
     serial_debug_preinit();

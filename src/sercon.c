@@ -517,6 +517,8 @@ void sercon_setup(void)
     u16 addr;
 
     addr = romfile_loadint("etc/sercon-port", 0);
+    if (!addr && CONFIG_KVMTOOL)
+        addr = 0x3f8;
     if (!addr)
         return;
     dprintf(1, "sercon: using ioport 0x%x\n", addr);

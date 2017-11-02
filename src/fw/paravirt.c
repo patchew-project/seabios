@@ -621,3 +621,51 @@ void qemu_cfg_init(void)
         dprintf(1, "Moving pm_base to 0x%x\n", acpi_pm_base);
     }
 }
+
+void
+kvmtool_platform_setup(void)
+{
+    if (!CONFIG_KVMTOOL)
+        return;
+
+    pci_probe_devices();
+}
+
+void
+kvmtool_preinit(void)
+{
+    /*
+     * When started without firmware kvmtool creates a e820 map for
+     * the guest kernel.  When started with "--firmware $file" it
+     * doesn't, so we have to figure.
+     *
+     * Detects only memory below 4G for now as we run in 32bit mode.
+     * For memory above 4G we would have to:
+     *    (1) get hints from kvmtool somehow, or
+     *    (2) enable paging, or
+     *    (3) enter long mode.
+     *
+     * There is a 768M memory hole for I/O,
+     * see x86/include/kvm/kvm-arch.h in kvmtool.
+     */
+    static const u32 max_mb_32bit = 4096 - 768;
+    u32 mb, *ptr;
+
+    if (!CONFIG_KVMTOOL)
+        return;
+
+    for (mb = 16; mb < max_mb_32bit; mb++) {
+        ptr = (void*)(mb * 1024 * 1024 - 4);
+        *ptr = mb;
+    }
+    for (mb = 16; mb < max_mb_32bit; mb++) {
+        ptr = (void*)(mb * 1024 * 1024 - 4);
+        if (*ptr != mb)
+            break;
+        RamSize = mb * 1024 * 1024;
+    }
+
+    dprintf(1,"kvmtool: probed %d MB low RAM.\n",
+            RamSize / (1024 * 1024));
+    e820_add(0, RamSize, E820_RAM);
+}

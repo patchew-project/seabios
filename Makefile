@@ -92,6 +92,7 @@ endif
 
 target-y :=
 target-$(CONFIG_QEMU) += $(OUT)bios.bin
+target-$(CONFIG_KVMTOOL) += $(OUT)bios.bin
 target-$(CONFIG_CSM) += $(OUT)Csm16.bin
 target-$(CONFIG_COREBOOT) += $(OUT)bios.bin.elf
 target-$(CONFIG_BUILD_VGABIOS) += $(OUT)vgabios.bin

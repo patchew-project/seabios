@@ -25,6 +25,11 @@ choice
            Configure to be used by EFI firmware as Compatibility Support
            module (CSM) to provide legacy BIOS services.
 
+    config KVMTOOL
+        bool "Build for kvmtool"
+        help
+            Configure for an emulated machine (kvmtool).
+
 endchoice
 
     config QEMU_HARDWARE
@@ -61,6 +66,7 @@ endchoice
             Support an interactive boot menu at end of post.
     config BOOTSPLASH
         depends on BOOTMENU
+        depends on !KVMTOOL
         bool "Graphical boot splash screen"
         default y
         help
@@ -124,6 +130,7 @@ endchoice
 
     config ROM_SIZE
         int "ROM size (in KB)"
+        default 128 if KVMTOOL
         default 0
         help
             Set the ROM size.  Say '0' here to make seabios figure the
@@ -138,6 +145,7 @@ endmenu
 menu "Hardware support"
     config ATA
         depends on DRIVES
+        depends on !KVMTOOL
         bool "ATA controllers"
         default y
         help
@@ -156,24 +164,26 @@ menu "Hardware support"
             Use 32bit PIO accesses on ATA (minor optimization on PCI transfers).
     config AHCI
         depends on DRIVES
+        depends on !KVMTOOL
         bool "AHCI controllers"
         default y
         help
             Support for AHCI disk code.
     config SDCARD
         depends on DRIVES
+        depends on !KVMTOOL
         bool "SD controllers"
         default y
         help
             Support for SD cards on PCI host controllers.
     config VIRTIO_BLK
-        depends on DRIVES && QEMU_HARDWARE
+        depends on DRIVES && (QEMU_HARDWARE || KVMTOOL)
         bool "virtio-blk controllers"
         default y
         help
             Support boot from virtio-blk storage.
     config VIRTIO_SCSI
-        depends on DRIVES && QEMU_HARDWARE
+        depends on DRIVES && (QEMU_HARDWARE || KVMTOOL)
         bool "virtio-scsi controllers"
         default y
         help
@@ -204,6 +214,7 @@ menu "Hardware support"
             Support boot from qemu-emulated lsi53c895a scsi storage.
     config MEGASAS
         depends on DRIVES
+        depends on !KVMTOOL
         bool "LSI MegaRAID SAS controllers"
         default y
         help
@@ -216,6 +227,7 @@ menu "Hardware support"
             Support boot from LSI MPT Fusion scsi storage.
     config FLOPPY
         depends on DRIVES && HARDWARE_IRQ
+        depends on !KVMTOOL
         bool "Floppy controller"
         default y
         help
@@ -229,6 +241,7 @@ menu "Hardware support"
             QEMU fw_cfg.
     config NVME
         depends on DRIVES
+        depends on !KVMTOOL
         bool "NVMe controllers"
         default y
         help
@@ -236,6 +249,7 @@ menu "Hardware support"
 
     config PS2PORT
         depends on KEYBOARD || MOUSE
+        depends on !KVMTOOL
         bool "PS/2 port"
         default y
         help
@@ -243,6 +257,7 @@ menu "Hardware support"
 
     config USB
         bool "USB"
+        depends on !KVMTOOL
         default y
         help
             Support USB devices.
@@ -355,6 +370,7 @@ menu "Hardware support"
             Initialize the Memory Type Range Registers (on emulators).
     config PMTIMER
         bool "Support ACPI timer"
+        depends on !KVMTOOL
         default y
         help
             Detect and use the ACPI timer for timekeeping.
@@ -404,6 +420,7 @@ menu "BIOS interfaces"
     config OPTIONROMS
         bool "Option ROMS"
         default y
+        depends on !KVMTOOL
         help
             Support finding and running option roms during POST.
     config PMM
@@ -466,6 +483,7 @@ menu "BIOS interfaces"
 
     config TCGBIOS
         depends on S3_RESUME
+        depends on !KVMTOOL
         bool "TPM support and TCG BIOS extensions"
         default y
         help
@@ -493,6 +511,7 @@ menu "BIOS Tables"
             sometimes called DMI.
     config ACPI
         bool "ACPI"
+        depends on !KVMTOOL
         default y
         help
             Support generation of ACPI tables.

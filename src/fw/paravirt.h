@@ -60,4 +60,7 @@ int qemu_cfg_write_file(void *src, struct romfile_s *file, u32 offset, u32 len);
 int qemu_cfg_write_file_simple(void *src, u16 key, u32 offset, u32 len);
 u16 qemu_get_romfile_key(struct romfile_s *file);
 
+void kvmtool_preinit(void);
+void kvmtool_platform_setup(void);
+
 #endif
