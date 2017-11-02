@@ -488,10 +488,18 @@ void vp_init_simple(struct vp_device *vp, struct pci_device *pci)
     } else {
         dprintf(1, "pci dev %pP using legacy (0.9.5) virtio mode\n", pci);
         vp->legacy.bar = 0;
-        vp->legacy.ioaddr = pci_enable_iobar(pci, PCI_BASE_ADDRESS_0);
-        if (!vp->legacy.ioaddr)
-            return;
-        vp->legacy.mode = VP_ACCESS_IO;
+        addr = pci_config_readl(pci->bdf, PCI_BASE_ADDRESS_0);
+        if (addr & PCI_BASE_ADDRESS_SPACE_IO) {
+            vp->legacy.ioaddr = addr & PCI_BASE_ADDRESS_IO_MASK;
+            if (!vp->legacy.ioaddr)
+                return;
+            vp->legacy.mode = VP_ACCESS_IO;
+        } else {
+            vp->legacy.ioaddr = addr & PCI_BASE_ADDRESS_MEM_MASK;
+            if (!vp->legacy.ioaddr)
+                return;
+            vp->legacy.mode = VP_ACCESS_MMIO;
+        }
     }
 
     vp_reset(vp);
