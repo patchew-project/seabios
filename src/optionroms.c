@@ -193,6 +193,11 @@ run_file_roms(const char *prefix, int isvga, u64 *sources)
         file = romfile_findprefix(prefix, file);
         if (!file)
             break;
+        if (strcmp(file->name, "vgaroms/sgabios.bin") == 0 &&
+            CONFIG_SERCON && romfile_loadint("etc/sercon-port", 0)) {
+            dprintf(1, "sercon: is enabled, not loading sgabios rom.\n");
+            continue;
+        }
         struct rom_header *rom = deploy_romfile(file);
         if (rom) {
             setRomSource(sources, rom, (u32)file);
