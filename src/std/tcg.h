@@ -599,7 +599,7 @@ struct pcctes_romex
 #define TPM_STATE_OWNERINSTALL 8
 
 #define TPM2_STATE_CREATE_EK 1
-#define TPM2_STATE_CREATE_PSK 2
+#define TPM2_STATE_CREATE_SPK 2
 
 #define TPM_PPI_OP_NOOP 0
 #define TPM_PPI_OP_ENABLE 1
@@ -612,5 +612,6 @@ struct pcctes_romex
 
 /* additional operations */
 #define TPM_PPI_EXT_OP_CREATE_EK  (0xe0 + 0)
+#define TPM_PPI_EXT_OP_CREATE_SPK (0xe0 + 1)
 
 #endif // tcg.h

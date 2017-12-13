@@ -1866,6 +1866,50 @@ tpm20_create_ek(int verbose, u32 *keyhandle)
 }
 
 static int
+tpm20_create_spk(int verbose, u32 *keyhandle)
+{
+    struct tpm2_tpmt_public {
+        u16 publen;
+        u16 alg_key;
+        u16 alg_hash;
+        u32 keyflags;
+        u16 authpolicylen;
+        u8 authpolicy[0];
+        struct symkeydata {
+            u16 algorithm;
+            u16 keyBits;
+            u16 mode;
+        } symkeydata;
+        u16 scheme;
+        u16 keyBits;
+        u32 exponent;
+    } PACKED ttp = {
+        .publen = cpu_to_be16(sizeof(ttp)),
+        .alg_key = cpu_to_be16(TPM2_ALG_RSA),
+        .alg_hash = cpu_to_be16(TPM2_ALG_SHA256),
+        .keyflags = cpu_to_be32(TPM2_OBJECT_FIXEDTPM |
+                                TPM2_OBJECT_FIXEDPARENT |
+                                TPM2_OBJECT_SENSITIVEDATAORIGIN |
+                                TPM2_OBJECT_USERWITHAUTH |
+                                TPM2_OBJECT_NODA |
+                                TPM2_OBJECT_RESTRICTED |
+                                TPM2_OBJECT_DECRYPT),
+        .authpolicylen = cpu_to_be16(sizeof(ttp.authpolicy)),
+        .symkeydata = {
+            .algorithm = cpu_to_be16(TPM2_ALG_AES),
+            .keyBits = cpu_to_be16(128),
+            .mode = cpu_to_be16(TPM2_ALG_CFB),
+        },
+        .scheme = cpu_to_be16(TPM2_ALG_NULL),
+        .keyBits = cpu_to_be16(2048),
+        .exponent = cpu_to_be32(0),
+    };
+
+    return tpm20_createprimary(TPM2_RH_OWNER, &ttp, sizeof(ttp),
+                               keyhandle);
+}
+
+static int
 tpm20_evictcontrol(u32 authhandle, u32 keyhandle,
                    u32 persistentHandle)
 {
@@ -1921,6 +1965,15 @@ tpm20_process_cfg(tpm_ppi_code msgCode, int verbose)
             ret = tpm20_evictcontrol(TPM2_RH_OWNER,
                                      keyhandle,
                                      0x81010001);
+            break;
+
+        case TPM_PPI_EXT_OP_CREATE_SPK:
+            ret = tpm20_create_spk(verbose, &keyhandle);
+            if (ret)
+                break;
+            ret = tpm20_evictcontrol(TPM2_RH_OWNER,
+                                     keyhandle,
+                                     0x81000001);
             break;
     }
 
@@ -2121,6 +2174,7 @@ tpm20_get_tpm_state(void)
 
     struct tpml_handle *handles = (struct tpml_handle *)&trg->data;
     int has_ek = 0;
+    int has_spk = 0;
 
     num_handles = be32_to_cpu(handles->count);
 
@@ -2128,10 +2182,14 @@ tpm20_get_tpm_state(void)
         u32 h = be32_to_cpu(handles->handle[i]);
         if (h >= 0x81010000 && h <= 0x8101ffff)
              has_ek = 1;
+        if (h >= 0x81000000 && h <= 0x8100ffff)
+             has_spk = 1;
     }
 
     if (!has_ek)
         state |= TPM2_STATE_CREATE_EK;
+    if (!has_spk)
+        state |= TPM2_STATE_CREATE_SPK;
 
     return state;
 }
@@ -2148,12 +2206,22 @@ tpm20_show_tpm_menu(int state, int next_scancodes[4])
         printf(" - has");
     printf(" a persistent endorsement key.\n");
 
+    if (state & TPM2_STATE_CREATE_SPK)
+        printf(" - does not have");
+    else
+        printf(" - has");
+    printf(" a persistent storage primary key.\n");
+
     printf("\n1. Clear TPM\n");
     next_scancodes[i++] = 2;
 
     if (state & TPM2_STATE_CREATE_EK) {
         printf("2. Create a persistent endorsement primary key\n");
         next_scancodes[i++] = 3;
+    }
+    if (state & TPM2_STATE_CREATE_SPK) {
+        printf("3. Create a primary storage key\n");
+        next_scancodes[i++] = 4;
     }
     next_scancodes[i++] = 0;
 }
@@ -2196,6 +2264,9 @@ tpm20_menu(void)
                 break;
             case 3:
                 msgCode = TPM_PPI_EXT_OP_CREATE_EK;
+                break;
+            case 4:
+                msgCode = TPM_PPI_EXT_OP_CREATE_SPK;
                 break;
             default:
                 continue;
