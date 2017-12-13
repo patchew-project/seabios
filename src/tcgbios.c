@@ -1752,9 +1752,157 @@ tpm20_clear(void)
 }
 
 static int
+tpm20_createprimary(u32 authhandle,
+                    void *pubdata, size_t pubdata_len,
+                    u32 *keyhandle)
+{
+    u8 buffer[128];
+    struct tpm2_req_createprimary_p1 trcp = {
+        .hdr.tag     = cpu_to_be16(TPM2_ST_SESSIONS),
+        .hdr.totlen  = 0,
+        .hdr.ordinal = cpu_to_be32(TPM2_CC_CreatePrimary),
+        .authhandle = cpu_to_be32(authhandle),
+        .authblocksize = cpu_to_be32(sizeof(trcp.authblock)),
+        .authblock = {
+            .handle = cpu_to_be32(TPM2_RS_PW),
+            .noncesize = cpu_to_be16(0),
+            .contsession = TPM2_YES,
+            .pwdsize = cpu_to_be16(0),
+        },
+        .sensitive_len = cpu_to_be16(sizeof(trcp.sensitive)),
+        .sensitive = {0, },
+    };
+    u16 outsideInfoLen = cpu_to_be16(0);
+    struct tpml_pcr_selection {
+        u32 count;
+        u16 hash;
+    } PACKED tps = {
+        .count = cpu_to_be32(0),
+        .hash = cpu_to_be16(0),
+    };
+
+    u32 off = sizeof(trcp);
+    memcpy(&buffer[off], pubdata, pubdata_len);
+
+    off += pubdata_len;
+    memcpy(&buffer[off], &outsideInfoLen, sizeof(outsideInfoLen));
+
+    off += sizeof(outsideInfoLen);
+    memcpy(&buffer[off], &tps, sizeof(tps));
+
+    off += sizeof(tps);
+    if (off > sizeof(buffer))
+        warn_internalerror();
+    /* complete header and copy */
+    trcp.hdr.totlen = cpu_to_be32(off);
+    memcpy(buffer, &trcp, sizeof(trcp));
+
+    struct tpm2_res_createprimary rsp;
+    u32 resp_length = sizeof(rsp);
+
+    int ret = tpmhw_transmit(0, (struct tpm_req_header *)buffer,
+                             &rsp, &resp_length,
+                             TPM_DURATION_TYPE_LONG);
+    dprintf(DEBUG_tcg, "TCGBIOS: ret= 0x%08x, resp_length = %d (%d), errcode=0x%08x\n",
+            ret, resp_length, sizeof(rsp), rsp.hdr.errcode);
+    if (ret || rsp.hdr.errcode)
+        ret = -1;
+
+    *keyhandle = be32_to_cpu(rsp.keyhandle);
+
+    dprintf(DEBUG_tcg, "TCGBIOS: Return value from sending TPM2_CC_CreatePirmary = 0x%08x, keyhandle=0x%08x\n",
+            ret, *keyhandle);
+
+    return ret;
+}
+
+static int
+tpm20_create_ek(int verbose, u32 *keyhandle)
+{
+    struct tpm2_tpmt_public {
+        u16 publen;
+        u16 alg_key;
+        u16 alg_hash;
+        u32 keyflags;
+        u16 authpolicylen;
+        u8 authpolicy[32];
+        struct symkeydata {
+            u16 algorithm;
+            u16 keyBits;
+            u16 mode;
+        } symkeydata;
+        u16 scheme;
+        u16 keyBits;
+        u32 exponent;
+    } PACKED ttp = {
+        .publen = cpu_to_be16(sizeof(ttp)),
+        .alg_key = cpu_to_be16(TPM2_ALG_RSA),
+        .alg_hash = cpu_to_be16(TPM2_ALG_SHA256),
+        .keyflags = cpu_to_be32(TPM2_OBJECT_FIXEDTPM |
+                                TPM2_OBJECT_FIXEDPARENT |
+                                TPM2_OBJECT_SENSITIVEDATAORIGIN |
+                                TPM2_OBJECT_ADMINWITHPOLICY |
+                                TPM2_OBJECT_RESTRICTED |
+                                TPM2_OBJECT_DECRYPT),
+        .authpolicylen = cpu_to_be16(sizeof(ttp.authpolicy)),
+        .authpolicy = {
+            0x83, 0x71, 0x97, 0x67, 0x44, 0x84, 0xb3, 0xf8,
+            0x1a, 0x90, 0xcc, 0x8d, 0x46, 0xa5, 0xd7, 0x24,
+            0xfd, 0x52, 0xd7, 0x6e, 0x06, 0x52, 0x0b, 0x64,
+            0xf2, 0xa1, 0xda, 0x1b, 0x33, 0x14, 0x69, 0xaa
+        },
+        .symkeydata = {
+            .algorithm = cpu_to_be16(TPM2_ALG_AES),
+            .keyBits = cpu_to_be16(128),
+            .mode = cpu_to_be16(TPM2_ALG_CFB),
+        },
+        .scheme = cpu_to_be16(TPM2_ALG_NULL),
+        .keyBits = cpu_to_be16(2048),
+        .exponent = cpu_to_be32(0),
+    };
+
+    return tpm20_createprimary(TPM2_RH_ENDORSEMENT, &ttp, sizeof(ttp),
+                               keyhandle);
+}
+
+static int
+tpm20_evictcontrol(u32 authhandle, u32 keyhandle,
+                   u32 persistentHandle)
+{
+    struct tpm20_evictcontrol te = {
+        .hdr.tag     = cpu_to_be16(TPM2_ST_SESSIONS),
+        .hdr.totlen  = cpu_to_be32(sizeof(te)),
+        .hdr.ordinal = cpu_to_be32(TPM2_CC_EvictControl),
+        .authhandle = cpu_to_be32(authhandle),
+        .keyhandle = cpu_to_be32(keyhandle),
+        .authblocksize = cpu_to_be32(sizeof(te.authblock)),
+        .authblock = {
+            .handle = cpu_to_be32(TPM2_RS_PW),
+            .noncesize = cpu_to_be16(0),
+            .contsession = TPM2_YES,
+            .pwdsize = cpu_to_be16(0),
+        },
+        .persistentHandle = cpu_to_be32(persistentHandle),
+    };
+
+    struct tpm_rsp_header rsp;
+    u32 resp_length = sizeof(rsp);
+    int ret = tpmhw_transmit(0, &te.hdr, &rsp, &resp_length,
+                             TPM_DURATION_TYPE_SHORT);
+    if (ret || resp_length != sizeof(rsp) || rsp.errcode)
+        ret = -1;
+
+    dprintf(DEBUG_tcg, "TCGBIOS: Return value from sending TPM2_CC_EvictControl = 0x%08x\n",
+            ret);
+
+    return ret;
+}
+
+static int
 tpm20_process_cfg(tpm_ppi_code msgCode, int verbose)
 {
     int ret = 0;
+    u32 keyhandle;
 
     switch (msgCode) {
         case TPM_PPI_OP_NOOP: /* no-op */
@@ -1764,6 +1912,15 @@ tpm20_process_cfg(tpm_ppi_code msgCode, int verbose)
             ret = tpm20_clearcontrol(0, verbose);
             if (!ret)
                  ret = tpm20_clear();
+            break;
+
+        case TPM_PPI_EXT_OP_CREATE_EK:
+            ret = tpm20_create_ek(verbose, &keyhandle);
+            if (ret)
+                break;
+            ret = tpm20_evictcontrol(TPM2_RH_OWNER,
+                                     keyhandle,
+                                     0x81010001);
             break;
     }
 
@@ -1947,14 +2104,75 @@ tpm12_menu(void)
     }
 }
 
+static int
+tpm20_get_tpm_state(void)
+{
+    int state = 0;
+    u8 buffer[256];
+    struct tpm2_res_getcapability *trg =
+      (struct tpm2_res_getcapability *)&buffer;
+    u32 i, num_handles;
+
+    int ret = tpm20_getcapability(TPM2_CAP_HANDLES, TPM2_HT_PERSISTENT,
+          (sizeof(buffer) - offsetof(struct tpm2_res_getcapability, data)) / 4,
+          &trg->hdr, sizeof(buffer));
+    if (ret)
+        return ~0;
+
+    struct tpml_handle *handles = (struct tpml_handle *)&trg->data;
+    int has_ek = 0;
+
+    num_handles = be32_to_cpu(handles->count);
+
+    for (i = 0; i < num_handles; i++) {
+        u32 h = be32_to_cpu(handles->handle[i]);
+        if (h >= 0x81010000 && h <= 0x8101ffff)
+             has_ek = 1;
+    }
+
+    if (!has_ek)
+        state |= TPM2_STATE_CREATE_EK;
+
+    return state;
+}
+
+static void
+tpm20_show_tpm_menu(int state, int next_scancodes[4])
+{
+    int i = 0;
+
+    printf("\nThe current state of the TPM is:\n");
+    if (state & TPM2_STATE_CREATE_EK)
+        printf(" - does not have");
+    else
+        printf(" - has");
+    printf(" a persistent endorsement key.\n");
+
+    printf("\n1. Clear TPM\n");
+    next_scancodes[i++] = 2;
+
+    if (state & TPM2_STATE_CREATE_EK) {
+        printf("2. Create a persistent endorsement primary key\n");
+        next_scancodes[i++] = 3;
+    }
+    next_scancodes[i++] = 0;
+}
+
 static void
 tpm20_menu(void)
 {
-    int scan_code;
+    int scan_code, next_scancodes[4];
     tpm_ppi_code msgCode;
+    int state, i;
+    int waitkey;
 
     for (;;) {
-        printf("1. Clear TPM\n");
+        if ((state = tpm20_get_tpm_state()) != ~0) {
+            tpm20_show_tpm_menu(state, next_scancodes);
+        } else {
+            printf("TPM is not working correctly.\n");
+            return;
+        }
 
         printf("\nIf no change is desired or if this menu was reached by "
                "mistake, press ESC to\n"
@@ -1962,22 +2180,42 @@ tpm20_menu(void)
 
         msgCode = TPM_PPI_OP_NOOP;
 
-        while ((scan_code = get_keystroke(1000)) == ~0)
-            ;
+        waitkey = 1;
 
-        switch (scan_code) {
-        case 1:
-            // ESC
-            reset();
-            break;
-        case 2:
-            msgCode = TPM_PPI_OP_CLEAR;
-            break;
-        default:
-            continue;
+        while (waitkey) {
+            while ((scan_code = get_keystroke(1000)) == ~0)
+                ;
+
+            switch (scan_code) {
+            case 1:
+                // ESC
+                reset();
+                break;
+            case 2:
+                msgCode = TPM_PPI_OP_CLEAR;
+                break;
+            case 3:
+                msgCode = TPM_PPI_EXT_OP_CREATE_EK;
+                break;
+            default:
+                continue;
+            }
+
+            /*
+             * Using the next_scancodes array, check whether the
+             * pressed key is currently a valid option.
+             */
+            for (i = 0; i < sizeof(next_scancodes); i++) {
+                if (next_scancodes[i] == 0)
+                    break;
+
+                if (next_scancodes[i] == scan_code) {
+                    tpm20_process_cfg(msgCode, 0);
+                    waitkey = 0;
+                    break;
+                }
+            }
         }
-
-        tpm20_process_cfg(msgCode, 0);
     }
 }
 

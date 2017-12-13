@@ -330,21 +330,27 @@ struct tpm_res_sha1complete {
 #define TPM2_RH_ENDORSEMENT         0x4000000b
 #define TPM2_RH_PLATFORM            0x4000000c
 
+#define TPM2_ALG_RSA                0x0001
 #define TPM2_ALG_SHA1               0x0004
+#define TPM2_ALG_AES                0x0006
 #define TPM2_ALG_SHA256             0x000b
 #define TPM2_ALG_SHA384             0x000c
 #define TPM2_ALG_SHA512             0x000d
+#define TPM2_ALG_NULL               0x0010
 #define TPM2_ALG_SM3_256            0x0012
+#define TPM2_ALG_CFB                0x0043
 
 /* TPM 2 command tags */
 #define TPM2_ST_NO_SESSIONS         0x8001
 #define TPM2_ST_SESSIONS            0x8002
 
 /* TPM 2 commands */
+#define TPM2_CC_EvictControl        0x120
 #define TPM2_CC_HierarchyControl    0x121
 #define TPM2_CC_Clear               0x126
 #define TPM2_CC_ClearControl        0x127
 #define TPM2_CC_HierarchyChangeAuth 0x129
+#define TPM2_CC_CreatePrimary       0x131
 #define TPM2_CC_SelfTest            0x143
 #define TPM2_CC_Startup             0x144
 #define TPM2_CC_StirRandom          0x146
@@ -356,7 +362,24 @@ struct tpm_res_sha1complete {
 #define TPM2_RC_INITIALIZE          0x100
 
 /* TPM 2 Capabilities */
+#define TPM2_CAP_HANDLES            0x00000001
 #define TPM2_CAP_PCRS               0x00000005
+
+/* TPM 2 Handle types */
+#define TPM2_HT_PERSISTENT          0x81000000
+
+/* TPM 2 Object flags */
+#define TPM2_OBJECT_FIXEDTPM        (1 << 1)
+#define TPM2_OBJECT_STCLEAR         (1 << 2)
+#define TPM2_OBJECT_FIXEDPARENT     (1 << 4)
+#define TPM2_OBJECT_SENSITIVEDATAORIGIN (1 << 5)
+#define TPM2_OBJECT_USERWITHAUTH    (1 << 6)
+#define TPM2_OBJECT_ADMINWITHPOLICY (1 << 7)
+#define TPM2_OBJECT_NODA            (1 << 10)
+#define TPM2_OBJECT_ENCRYPTEDDUPLICATION (1 << 11)
+#define TPM2_OBJECT_RESTRICTED      (1 << 16)
+#define TPM2_OBJECT_DECRYPT         (1 << 17)
+#define TPM2_OBJECT_SIGN            (1 << 18)
 
 /* TPM 2 data structures */
 
@@ -453,6 +476,39 @@ struct tpml_pcr_selection {
     struct tpms_pcr_selection selections[0];
 } PACKED;
 
+struct tpml_handle {
+    u32 count;
+    u32 handle[0];
+} PACKED;
+
+struct tpm2_req_createprimary_p1 {
+    struct tpm_req_header hdr;
+    u32 authhandle;
+    u32 authblocksize;
+    struct tpm2_authblock authblock;
+    u16 sensitive_len;
+    u8 sensitive[4]; /* set to 0 */
+    /*
+    TPM2B_PUBLIC inPublic;
+    TPM2B_DATA outsideInfo
+    TPML_PCR_SELECTION creationPCR;
+    */
+} PACKED;
+
+struct tpm2_res_createprimary {
+    struct tpm_rsp_header hdr;
+    u32 keyhandle;
+    /* lots more data */
+} PACKED;
+
+struct tpm20_evictcontrol {
+    struct tpm_req_header hdr;
+    u32 authhandle;
+    u32 keyhandle;
+    u32 authblocksize;
+    struct tpm2_authblock authblock;
+    u32 persistentHandle;
+} PACKED;
 
 /****************************************************************
  * ACPI TCPA table interface
@@ -542,6 +598,9 @@ struct pcctes_romex
 #define TPM_STATE_OWNED 4
 #define TPM_STATE_OWNERINSTALL 8
 
+#define TPM2_STATE_CREATE_EK 1
+#define TPM2_STATE_CREATE_PSK 2
+
 #define TPM_PPI_OP_NOOP 0
 #define TPM_PPI_OP_ENABLE 1
 #define TPM_PPI_OP_DISABLE 2
@@ -550,5 +609,8 @@ struct pcctes_romex
 #define TPM_PPI_OP_CLEAR 5
 #define TPM_PPI_OP_SET_OWNERINSTALL_TRUE 8
 #define TPM_PPI_OP_SET_OWNERINSTALL_FALSE 9
+
+/* additional operations */
+#define TPM_PPI_EXT_OP_CREATE_EK  (0xe0 + 0)
 
 #endif // tcg.h
