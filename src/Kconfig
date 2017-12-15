@@ -294,12 +294,26 @@ menu "Hardware support"
         default y
         help
             Support USB keyboards.
+    config NUM_USB_KEYBOARD
+        depends on USB_KEYBOARD
+        int "Maximum number of USB keyboards supported"
+        default 1
+        help
+            Sets the maximum number of USB keyboards that can be used
+            at the same time.
     config USB_MOUSE
         depends on USB && MOUSE
         bool "USB mice"
         default y
         help
             Support USB mice.
+    config NUM_USB_MOUSE
+        depends on USB_MOUSE
+        int "Maximum number of USB mice supported"
+        default 1
+        help
+            Sets the maximum number of USB mice that can be used
+            at the same time.
 
     config SERIAL
         bool "Serial port"

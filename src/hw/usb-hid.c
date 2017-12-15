@@ -12,8 +12,8 @@
 #include "usb-hid.h" // usb_keyboard_setup
 #include "util.h" // process_key
 
-struct usb_pipe *keyboard_pipe VARFSEG;
-struct usb_pipe *mouse_pipe VARFSEG;
+struct usb_pipe *keyboard_pipe[CONFIG_NUM_USB_KEYBOARD] VARFSEG = {0};
+struct usb_pipe *mouse_pipe[CONFIG_NUM_USB_MOUSE] VARFSEG = {0};
 
 
 /****************************************************************
@@ -53,11 +53,22 @@ static int
 usb_kbd_setup(struct usbdevice_s *usbdev
               , struct usb_endpoint_descriptor *epdesc)
 {
-    if (! CONFIG_USB_KEYBOARD)
+    int kbd_idx;
+
+    if (!CONFIG_USB_KEYBOARD || CONFIG_NUM_USB_KEYBOARD == 0) {
         return -1;
-    if (keyboard_pipe)
-        // XXX - this enables the first found keyboard (could be random)
+    }
+
+    for (kbd_idx = 0; kbd_idx < CONFIG_NUM_USB_KEYBOARD; kbd_idx++) {
+        if (keyboard_pipe[kbd_idx] == NULL) {
+            break;
+        }
+    }
+
+    if (kbd_idx == CONFIG_NUM_USB_KEYBOARD) {
+        dprintf(1, "USB keyboard %d already in use, skipping..\n", kbd_idx);
         return -1;
+    }
 
     if (epdesc->wMaxPacketSize != 8)
         return -1;
@@ -71,11 +82,12 @@ usb_kbd_setup(struct usbdevice_s *usbdev
     if (ret)
         return -1;
 
-    keyboard_pipe = usb_alloc_pipe(usbdev, epdesc);
-    if (!keyboard_pipe)
+    keyboard_pipe[kbd_idx] = usb_alloc_pipe(usbdev, epdesc);
+    if (!keyboard_pipe[kbd_idx]) {
         return -1;
+    }
 
-    dprintf(1, "USB keyboard initialized\n");
+    dprintf(1, "USB keyboard %d initialized\n", kbd_idx);
     return 0;
 }
 
@@ -83,11 +95,22 @@ static int
 usb_mouse_setup(struct usbdevice_s *usbdev
                 , struct usb_endpoint_descriptor *epdesc)
 {
-    if (! CONFIG_USB_MOUSE)
+    int mouse_idx;
+
+    if (!CONFIG_USB_MOUSE || CONFIG_NUM_USB_MOUSE == 0) {
         return -1;
-    if (mouse_pipe)
-        // XXX - this enables the first found mouse (could be random)
+    }
+
+    for (mouse_idx = 0; mouse_idx < CONFIG_NUM_USB_MOUSE; mouse_idx++) {
+        if (mouse_pipe[mouse_idx] == NULL) {
+            break;
+        }
+    }
+
+    if (mouse_idx == CONFIG_NUM_USB_MOUSE) {
+        dprintf(1, "USB mouse %d already in use, skipping..\n", mouse_idx);
         return -1;
+    }
 
     if (epdesc->wMaxPacketSize < 3 || epdesc->wMaxPacketSize > 8)
         return -1;
@@ -97,11 +120,12 @@ usb_mouse_setup(struct usbdevice_s *usbdev
     if (ret)
         return -1;
 
-    mouse_pipe = usb_alloc_pipe(usbdev, epdesc);
-    if (!mouse_pipe)
+    mouse_pipe[mouse_idx] = usb_alloc_pipe(usbdev, epdesc);
+    if (!mouse_pipe[mouse_idx]) {
         return -1;
+    }
 
-    dprintf(1, "USB mouse initialized\n");
+    dprintf(1, "USB mouse %d initialized\n", mouse_idx);
     return 0;
 }
 
@@ -300,11 +324,11 @@ handle_key(struct keyevent *data)
 
 // Check if a USB keyboard event is pending and process it if so.
 static void
-usb_check_key(void)
+usb_check_key(int kbd_idx)
 {
     if (! CONFIG_USB_KEYBOARD)
         return;
-    struct usb_pipe *pipe = GET_GLOBAL(keyboard_pipe);
+    struct usb_pipe *pipe = GET_GLOBAL(keyboard_pipe[kbd_idx]);
     if (!pipe)
         return;
 
@@ -321,9 +345,10 @@ usb_check_key(void)
 inline int
 usb_kbd_active(void)
 {
-    if (! CONFIG_USB_KEYBOARD)
+    if (!CONFIG_USB_KEYBOARD || CONFIG_NUM_USB_KEYBOARD == 0) {
         return 0;
-    return GET_GLOBAL(keyboard_pipe) != NULL;
+    }
+    return GET_GLOBAL(keyboard_pipe[0]) != NULL;
 }
 
 // Handle a ps2 style keyboard command.
@@ -372,11 +397,11 @@ handle_mouse(struct mouseevent *data)
 
 // Check if a USB mouse event is pending and process it if so.
 static void
-usb_check_mouse(void)
+usb_check_mouse(int mouse_idx)
 {
     if (! CONFIG_USB_MOUSE)
         return;
-    struct usb_pipe *pipe = GET_GLOBAL(mouse_pipe);
+    struct usb_pipe *pipe = GET_GLOBAL(mouse_pipe[mouse_idx]);
     if (!pipe)
         return;
 
@@ -437,6 +462,13 @@ usb_mouse_command(int command, u8 *param)
 void
 usb_check_event(void)
 {
-    usb_check_key();
-    usb_check_mouse();
+    int i;
+
+    for (i = 0; i < CONFIG_NUM_USB_KEYBOARD; i++) {
+        usb_check_key(i);
+    }
+
+    for (i = 0; i < CONFIG_NUM_USB_MOUSE; i++) {
+        usb_check_mouse(i);
+    }
 }
