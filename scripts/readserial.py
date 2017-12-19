@@ -71,7 +71,7 @@ def readserial(infile, logfile, byteadjust):
                 continue
         d = infile.read(4096)
         if not d:
-            return 0
+            continue
         datatime = time.time()
 
         datatime -= len(d) * byteadjust
