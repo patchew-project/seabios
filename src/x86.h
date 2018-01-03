@@ -200,30 +200,27 @@ static inline void smp_wmb(void) {
 }
 
 static inline void writel(void *addr, u32 val) {
-    barrier();
-    *(volatile u32 *)addr = val;
+    asm volatile("movl %0, %1" : : "d"(val), "m"(*(u32 *)addr) : "memory");
 }
 static inline void writew(void *addr, u16 val) {
-    barrier();
-    *(volatile u16 *)addr = val;
+    asm volatile("movw %0, %1" : : "d"(val), "m"(*(u16 *)addr) : "memory");
 }
 static inline void writeb(void *addr, u8 val) {
-    barrier();
-    *(volatile u8 *)addr = val;
+    asm volatile("movb %0, %1" : : "d"(val), "m"(*(u8 *)addr) : "memory");
 }
 static inline u32 readl(const void *addr) {
-    u32 val = *(volatile const u32 *)addr;
-    barrier();
+    u32 val;
+    asm volatile("movl %1, %0" : "=d"(val) : "m"(*(u32 *)addr) : "memory");
     return val;
 }
 static inline u16 readw(const void *addr) {
-    u16 val = *(volatile const u16 *)addr;
-    barrier();
+    u16 val;
+    asm volatile("movw %1, %0" : "=d"(val) : "m"(*(u16 *)addr) : "memory");
     return val;
 }
 static inline u8 readb(const void *addr) {
-    u8 val = *(volatile const u8 *)addr;
-    barrier();
+    u8 val;
+    asm volatile("movb %1, %0" : "=d"(val) : "m"(*(u8 *)addr) : "memory");
     return val;
 }
 
