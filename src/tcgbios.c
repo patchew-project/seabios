@@ -1774,6 +1774,18 @@ tpm20_process_cfg(tpm_ppi_code msgCode, int verbose)
 }
 
 static int
+tpm_process_cfg(tpm_ppi_code msgCode, int verbose)
+{
+    switch (TPM_version) {
+    case TPM_VERSION_1_2:
+        return tpm12_process_cfg(msgCode, verbose);
+    case TPM_VERSION_2:
+        return tpm20_process_cfg(msgCode, verbose);
+    }
+    return -1;
+}
+
+static int
 tpm12_get_tpm_state(void)
 {
     int state = 0;
@@ -2011,4 +2023,53 @@ tpm_can_show_menu(void)
         return tpm_is_working();
     }
     return 0;
+}
+
+static struct tpm_ppi *tp;
+static u8 next_step; /* next opcode to execute after reboot */
+
+void
+tpm_ppi_init(void)
+{
+    tp = (struct tpm_ppi *)TPM_PPI_ADDR_BASE;
+
+    dprintf(DEBUG_tcg, "TCGBIOS: TPM PPI struct at %p\n", tp);
+
+    if (!tp->ppin) {
+        tp->ppin = 1;
+        tp->pprq = 0;
+        tp->lppr = 0;
+        tp->fail = 0;
+    }
+}
+
+void
+tpm_ppi_process(void)
+{
+   tpm_ppi_code op;
+
+   if (tp) {
+        op = tp->pprq;
+        if (!op) {
+            /* intermediate step after a reboot? */
+            op = next_step;
+        } else {
+            /* last full opcode */
+            tp->lppr = op;
+        }
+        if (op) {
+            /*
+             * Reset the opcode so we don't permanently reboot upon
+             * code 3 (Activate).
+             */
+            tp->pprq = 0;
+
+            printf("Processing TPM PPI opcode %d\n", op);
+            tp->fail = (tpm_process_cfg(op, 0) != 0);
+            if (tp->fail)
+                tp->pprp = 0x0badc0de;
+            else
+                tp->pprp = 0;
+        }
+   }
 }

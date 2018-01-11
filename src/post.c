@@ -201,6 +201,7 @@ maininit(void)
 
     // Setup platform devices.
     platform_hardware_setup();
+    tpm_ppi_init();
 
     // Start hardware initialization (if threads allowed during optionroms)
     if (threads_during_optionroms())
@@ -219,6 +220,9 @@ maininit(void)
 
     // Run option roms
     optionrom_setup();
+
+    // Process user-requested TPM state change
+    tpm_ppi_process();
 
     // Allow user to modify overall boot order.
     interactive_bootmenu();

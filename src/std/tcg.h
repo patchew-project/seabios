@@ -551,4 +551,22 @@ struct pcctes_romex
 #define TPM_PPI_OP_SET_OWNERINSTALL_TRUE 8
 #define TPM_PPI_OP_SET_OWNERINSTALL_FALSE 9
 
+#define TPM_PPI_ADDR_BASE  0xffff0000
+
+struct tpm_ppi {
+    u8 ppin;            // 1 = initialized
+    u32 ppip;           // not used
+    u32 pprp;           // response from TPM; set by BIOS
+    u32 pprq;           // opcode; set by ACPI
+    u32 pprm;           // parameter for opcode; set by ACPI
+    u32 lppr;           // last opcode; set by BIOS
+    u32 fret;           // not used
+    u8 res1;            // reserved
+    u32 res[4];         // reserved
+    u32 fail;           // set by BIOS (0 = success)
+} PACKED;
+
+void tpm_ppi_init(void);
+void tpm_ppi_process(void);
+
 #endif // tcg.h
