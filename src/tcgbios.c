@@ -1783,6 +1783,18 @@ tpm20_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
 }
 
 static int
+tpm_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
+{
+    switch (TPM_version) {
+    case TPM_VERSION_1_2:
+        return tpm12_process_cfg(msgCode, verbose, returnCode);
+    case TPM_VERSION_2:
+        return tpm20_process_cfg(msgCode, verbose, returnCode);
+    }
+    return -1;
+}
+
+static int
 tpm12_get_tpm_state(void)
 {
     int state = 0;
@@ -2020,4 +2032,91 @@ tpm_can_show_menu(void)
         return tpm_is_working();
     }
     return 0;
+}
+
+static struct tpm_ppi *tp;
+static u8 nextStep = TPM_PPI_OP_NOOP; /* opcode to execute after reboot */
+
+#define FLAGS (TPM_PPI_FUNC_IMPLEMENTED | \
+               TPM_PPI_FUNC_ACTION_REBOOT | \
+               TPM_PPI_FUNC_ALLOWED_USR_NOT_REQ)
+
+static const u8 tpm12_ppi_funcs[] = {
+    [TPM_PPI_OP_NOOP] = TPM_PPI_FUNC_IMPLEMENTED |
+                        TPM_PPI_FUNC_ALLOWED_USR_NOT_REQ,
+    [TPM_PPI_OP_ENABLE]  = FLAGS,
+    [TPM_PPI_OP_DISABLE] = FLAGS,
+    [TPM_PPI_OP_ACTIVATE] = FLAGS,
+    [TPM_PPI_OP_DEACTIVATE] = FLAGS,
+    [TPM_PPI_OP_CLEAR] = FLAGS,
+    [TPM_PPI_OP_SET_OWNERINSTALL_TRUE] = FLAGS,
+    [TPM_PPI_OP_SET_OWNERINSTALL_FALSE] = FLAGS,
+};
+
+static const u8 tpm2_ppi_funcs[] = {
+    [TPM_PPI_OP_CLEAR] = FLAGS,
+};
+
+void
+tpm_ppi_init(void)
+{
+    struct qemu_descriptor *qemu = NULL;
+
+    while (1) {
+        qemu  = find_acpi_table_iter(QEMU_SIGNATURE, qemu);
+        if (!qemu)
+            return;
+        if (!memcmp("QEMU", qemu->oem_id, 5) && !memcmp("CONF", qemu->oem_table_id, 5))
+            break;
+    }
+
+    tp = (struct tpm_ppi *)(u32)qemu->tpmppi_address;
+    dprintf(DEBUG_tcg, "TCGBIOS: TPM PPI struct at %p\n", tp);
+
+    memset(&tp->func, 0, sizeof(tp->func));
+    switch (qemu->tpmppi_version) {
+    case TPM_PPI_VERSION_1_30:
+        switch (qemu->tpm_version) {
+        case TPM_VERSION_1_2:
+            memcpy(&tp->func, tpm12_ppi_funcs, sizeof(tpm12_ppi_funcs));
+            break;
+        case TPM_VERSION_2:
+            memcpy(&tp->func, tpm2_ppi_funcs, sizeof(tpm2_ppi_funcs));
+            break;
+        }
+        break;
+    }
+
+    if (!tp->ppin) {
+        tp->ppin = 1;
+        tp->pprq = 0;
+        tp->lppr = 0;
+    }
+}
+
+void
+tpm_ppi_process(void)
+{
+   tpm_ppi_code op;
+
+   if (tp) {
+        op = tp->pprq;
+        if (!op) {
+            /* intermediate step after a reboot? */
+            op = nextStep;
+        } else {
+            /* last full opcode */
+            tp->lppr = op;
+        }
+        if (op) {
+            /*
+             * Reset the opcode so we don't permanently reboot upon
+             * code 3 (Activate).
+             */
+            tp->pprq = 0;
+
+            printf("Processing TPM PPI opcode %d\n", op);
+            tpm_process_cfg(op, 0, &tp->pprp);
+        }
+   }
 }

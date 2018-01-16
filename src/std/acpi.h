@@ -320,4 +320,14 @@ struct tpm2_descriptor_rev2
     u64  log_area_start_address;
 } PACKED;
 
+#define QEMU_SIGNATURE 0x554d4551
+struct qemu_descriptor
+{
+    ACPI_TABLE_HEADER_DEF
+    u32 tpmppi_address;
+    u8 tpm_version; /* 1 = 1.2, 2 = 2 */
+    u8 tpmppi_version;
+#define TPM_PPI_VERSION_1_30   1
+} PACKED;
+
 #endif // acpi.h

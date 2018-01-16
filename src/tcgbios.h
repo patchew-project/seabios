@@ -16,4 +16,7 @@ void tpm_option_rom(const void *addr, u32 len);
 int tpm_can_show_menu(void);
 void tpm_menu(void);
 
+void tpm_ppi_init(void);
+void tpm_ppi_process(void);
+
 #endif /* TCGBIOS_H */
