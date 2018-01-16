@@ -1655,7 +1655,8 @@ tpm12_set_owner_install(int allow, int verbose, u32 *returnCode)
 }
 
 static int
-tpm12_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
+tpm12_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode,
+                  u8 *nextStep)
 {
     int ret = 0;
 
@@ -1683,12 +1684,61 @@ tpm12_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
             ret = tpm12_force_clear(1, 0, verbose, returnCode);
             break;
 
+        case TPM_PPI_OP_ENABLE_ACTIVATE:
+            ret = tpm12_enable_tpm(1, verbose, returnCode);
+            if (!ret)
+                ret = tpm12_activate_tpm(1, 1, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_DEACTIVATE_DISABLE:
+            ret = tpm12_activate_tpm(0, 1, verbose, returnCode);
+            if (!ret)
+                ret = tpm12_enable_tpm(0, verbose, returnCode);
+            break;
+
         case TPM_PPI_OP_SET_OWNERINSTALL_TRUE:
             ret = tpm12_set_owner_install(1, verbose, returnCode);
             break;
 
         case TPM_PPI_OP_SET_OWNERINSTALL_FALSE:
             ret = tpm12_set_owner_install(0, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_ENABLE_ACTIVATE_SET_OWNERINSTALL_TRUE:
+            *nextStep = TPM_PPI_OP_SET_OWNERINSTALL_TRUE;
+            ret = tpm12_enable_activate(1, verbose, returnCode);
+            if (!ret)
+                ret = tpm12_set_owner_install(1, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_SET_OWNERINSTALL_FALSE_DEACTIVATE_DISABLE:
+            ret = tpm12_set_owner_install(0, verbose, returnCode);
+            if (!ret)
+                ret = tpm12_activate_tpm(0, 0, verbose, returnCode);
+            if (!ret)
+                ret = tpm12_enable_tpm(0, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_CLEAR_ENABLE_ACTIVATE:
+            ret = tpm12_force_clear(0, 1, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_ENABLE_ACTIVATE_CLEAR:
+            *nextStep = TPM_PPI_OP_CLEAR;
+            ret = tpm12_enable_activate(1, verbose, returnCode);
+            /* no reboot happened */
+            if (!ret)
+                ret = tpm12_force_clear(0, 0, verbose, returnCode);
+            break;
+
+        case TPM_PPI_OP_ENABLE_ACTIVATE_CLEAR_ENABLE_ACTIVATE:
+            *nextStep = TPM_PPI_OP_CLEAR_ENABLE_ACTIVATE;
+            ret = tpm12_enable_activate(1, verbose, returnCode);
+            /* no reboot happened */
+            if (!ret) {
+                 *nextStep = TPM_PPI_OP_NOOP;
+                ret = tpm12_force_clear(0, 1, verbose, returnCode);
+            }
             break;
 
         default:
@@ -1783,11 +1833,12 @@ tpm20_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
 }
 
 static int
-tpm_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode)
+tpm_process_cfg(tpm_ppi_code msgCode, int verbose, u32 *returnCode,
+                u8 *nextStep)
 {
     switch (TPM_version) {
     case TPM_VERSION_1_2:
-        return tpm12_process_cfg(msgCode, verbose, returnCode);
+        return tpm12_process_cfg(msgCode, verbose, returnCode, nextStep);
     case TPM_VERSION_2:
         return tpm20_process_cfg(msgCode, verbose, returnCode);
     }
@@ -1959,7 +2010,8 @@ tpm12_menu(void)
                     break;
 
                 if (next_scancodes[i] == scancode) {
-                    tpm12_process_cfg(msgCode, 1, NULL);
+                    u8 ignore;
+                    tpm12_process_cfg(msgCode, 1, NULL, &ignore);
                     waitkey = 0;
                     break;
                 }
@@ -2049,8 +2101,15 @@ static const u8 tpm12_ppi_funcs[] = {
     [TPM_PPI_OP_ACTIVATE] = FLAGS,
     [TPM_PPI_OP_DEACTIVATE] = FLAGS,
     [TPM_PPI_OP_CLEAR] = FLAGS,
+    [TPM_PPI_OP_ENABLE_ACTIVATE] = FLAGS,
+    [TPM_PPI_OP_DEACTIVATE_DISABLE] = FLAGS,
     [TPM_PPI_OP_SET_OWNERINSTALL_TRUE] = FLAGS,
     [TPM_PPI_OP_SET_OWNERINSTALL_FALSE] = FLAGS,
+    [TPM_PPI_OP_ENABLE_ACTIVATE_SET_OWNERINSTALL_TRUE] = FLAGS,
+    [TPM_PPI_OP_SET_OWNERINSTALL_FALSE_DEACTIVATE_DISABLE] = FLAGS,
+    [TPM_PPI_OP_CLEAR_ENABLE_ACTIVATE] = FLAGS,
+    [TPM_PPI_OP_ENABLE_ACTIVATE_CLEAR] = FLAGS,
+    [TPM_PPI_OP_ENABLE_ACTIVATE_CLEAR_ENABLE_ACTIVATE] = FLAGS,
 };
 
 static const u8 tpm2_ppi_funcs[] = {
@@ -2116,7 +2175,7 @@ tpm_ppi_process(void)
             tp->pprq = 0;
 
             printf("Processing TPM PPI opcode %d\n", op);
-            tpm_process_cfg(op, 0, &tp->pprp);
+            tpm_process_cfg(op, 0, &tp->pprp, &nextStep);
         }
    }
 }
