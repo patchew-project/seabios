@@ -377,7 +377,7 @@ tpmhw_is_present(void)
 int
 tpmhw_transmit(u8 locty, struct tpm_req_header *req,
                void *respbuffer, u32 *respbufferlen,
-               enum tpmDurationType to_t)
+               enum tpmDurationType to_t, u32 *returnCode)
 {
     if (TPMHW_driver_to_use == TPM_INVALID_DRIVER)
         return -1;
@@ -407,6 +407,12 @@ tpmhw_transmit(u8 locty, struct tpm_req_header *req,
         return -1;
 
     td->ready();
+
+    if (returnCode && *respbufferlen >= sizeof(struct tpm_rsp_header)) {
+        struct tpm_rsp_header *r = respbuffer;
+
+        *returnCode = be32_to_cpu(r->errcode);
+    }
 
     return 0;
 }

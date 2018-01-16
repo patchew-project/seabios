@@ -21,7 +21,7 @@ int tpmhw_is_present(void);
 struct tpm_req_header;
 int tpmhw_transmit(u8 locty, struct tpm_req_header *req,
                    void *respbuffer, u32 *respbufferlen,
-                   enum tpmDurationType to_t);
+                   enum tpmDurationType to_t, u32 *returnCode);
 void tpmhw_set_timeouts(u32 timeouts[4], u32 durations[3]);
 
 /* TIS driver */
