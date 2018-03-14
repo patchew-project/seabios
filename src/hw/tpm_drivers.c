@@ -374,10 +374,21 @@ static u32 tis_waitrespready(enum tpmDurationType to_t)
     return rc;
 }
 
+#define CRB_STATE_VALID_STS 0b10000000
+
 /* if device is not there, return '0', '1' otherwise */
 static u32 crb_probe(void)
 {
     if (!CONFIG_TCGBIOS)
+        return 0;
+
+    /* request access -- this must cause a valid STS flag */
+    writeb(CRB_REG(0, CRB_REG_LOC_CTRL), 1);
+
+    /* Wait for the interface to report it's ready */
+    u32 rc = crb_wait_reg(0, CRB_REG_LOC_STATE, TIS2_DEFAULT_TIMEOUT_A,
+                          CRB_STATE_VALID_STS, CRB_STATE_VALID_STS);
+    if (rc)
         return 0;
 
     u32 ifaceid = readl(CRB_REG(0, CRB_REG_INTF_ID));
