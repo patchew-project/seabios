@@ -91,14 +91,14 @@ glob_prefix(const char *glob, const char *str)
     }
 }
 
-// Search the bootorder list for the given glob pattern.
+// Search the bootorder glob list for the given device description
 static int
-find_prio(const char *glob)
+find_prio(const char *desc)
 {
-    dprintf(1, "Searching bootorder for: %s\n", glob);
+    dprintf(1, "Searching bootorder for: %s\n", desc);
     int i;
     for (i = 0; i < BootorderCount; i++)
-        if (glob_prefix(glob, Bootorder[i]))
+        if (glob_prefix(Bootorder[i], desc))
             return i+1;
     return -1;
 }
