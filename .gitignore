@@ -1,3 +1,4 @@
+config.mak
 out
 *.pyc
 .config
