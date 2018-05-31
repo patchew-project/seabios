@@ -19,6 +19,7 @@ int cbvga_save_restore(int cmd, u16 seg, void *data);
 int cbvga_set_mode(struct vgamode_s *vmode_g, int flags);
 int cbvga_get_linesize(struct vgamode_s *vmode_g);
 int cbvga_setup(void);
+int bochs_display_setup(void);
 
 // clext.c
 struct vgamode_s *clext_find_mode(int mode);
