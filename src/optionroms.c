@@ -224,6 +224,17 @@ is_pci_vga(struct pci_device *pci)
     return 1;
 }
 
+int
+is_pci_display_other(struct pci_device *pci)
+{
+    if (pci->class != PCI_CLASS_DISPLAY_OTHER)
+        return 0;
+    u16 cmd = pci_config_readw(pci->bdf, PCI_COMMAND);
+    if (!(cmd & PCI_COMMAND_IO && cmd & PCI_COMMAND_MEMORY))
+        return 0;
+    return 1;
+}
+
 // Copy a rom to its permanent location below 1MiB
 static struct rom_header *
 copy_rom(struct rom_header *rom)
@@ -350,7 +361,9 @@ optionrom_setup(void)
     // Find and deploy PCI roms.
     struct pci_device *pci;
     foreachpci(pci) {
-        if (pci->class == PCI_CLASS_DISPLAY_VGA || pci->have_driver)
+        if (pci->class == PCI_CLASS_DISPLAY_VGA ||
+            pci->class == PCI_CLASS_DISPLAY_OTHER ||
+            pci->have_driver)
             continue;
         init_pcirom(pci, 0, sources);
     }
@@ -404,6 +417,8 @@ struct rom_header *VgaROM;
 void
 vgarom_setup(void)
 {
+    int have_vga = 0;
+
     if (! CONFIG_OPTIONROMS)
         return;
 
@@ -425,7 +440,19 @@ vgarom_setup(void)
             continue;
         vgahook_setup(pci);
         init_pcirom(pci, 1, NULL);
+        have_vga = 1;
         break;
+    }
+    if (!have_vga) {
+        // no VGA, try fallback to display
+        dprintf(1, "no vga, try display\n");
+        foreachpci(pci) {
+            if (!is_pci_display_other(pci))
+                continue;
+            vgahook_setup(pci);
+            init_pcirom(pci, 1, NULL);
+            break;
+        }
     }
 
     // Find and deploy CBFS vga-style roms not associated with a device.

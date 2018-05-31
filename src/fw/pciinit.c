@@ -431,6 +431,7 @@ static void pci_bios_init_devices(void)
 static void pci_enable_default_vga(void)
 {
     struct pci_device *pci;
+    int is_vga = 1;
 
     foreachpci(pci) {
         if (is_pci_vga(pci)) {
@@ -441,16 +442,22 @@ static void pci_enable_default_vga(void)
 
     pci = pci_find_class(PCI_CLASS_DISPLAY_VGA);
     if (!pci) {
-        dprintf(1, "PCI: No VGA devices found\n");
-        return;
+        dprintf(1, "PCI: No VGA devices found, trying other display devices\n");
+        pci = pci_find_class(PCI_CLASS_DISPLAY_OTHER);
+        if (!pci) {
+            dprintf(1, "PCI: No other display devices found\n");
+            return;
+        }
+        is_vga = 0;
     }
 
-    dprintf(1, "PCI: Enabling %pP for primary VGA\n", pci);
+    dprintf(1, "PCI: Enabling %pP for primary %s\n", pci
+            , is_vga ? "VGA" : "display");
 
     pci_config_maskw(pci->bdf, PCI_COMMAND, 0,
                      PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
 
-    while (pci->parent) {
+    while (is_vga && pci->parent) {
         pci = pci->parent;
 
         dprintf(1, "PCI: Setting VGA enable on bridge %pP\n", pci);
