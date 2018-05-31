@@ -196,6 +196,7 @@ cbvga_set_mode(struct vgamode_s *vmode_g, int flags)
 {
     u8 emul = vmode_g == &CBemulinfo || GET_GLOBAL(CBmode) == 0x03;
     MASK_BDA_EXT(flags, BF_EMULATE_TEXT, emul ? BF_EMULATE_TEXT : 0);
+#if 0
     if (!(flags & MF_NOCLEARMEM)) {
         if (GET_GLOBAL(CBmodeinfo.memmodel) == MM_TEXT) {
             memset16_far(SEG_CTEXT, (void*)0, 0x0720, 80*25*2);
@@ -209,6 +210,7 @@ cbvga_set_mode(struct vgamode_s *vmode_g, int flags)
         op.op = GO_MEMSET;
         handle_gfx_op(&op);
     }
+#endif
     return 0;
 }
 
