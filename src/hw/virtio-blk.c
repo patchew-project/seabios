@@ -25,7 +25,7 @@
 
 struct virtiodrive_s {
     struct drive_s drive;
-    struct vring_virtqueue *vq;
+    struct vring_virtqueue *vq[MAX_NUM_QUEUES];
     struct vp_device vp;
 };
 
@@ -34,7 +34,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
 {
     struct virtiodrive_s *vdrive =
         container_of(op->drive_fl, struct virtiodrive_s, drive);
-    struct vring_virtqueue *vq = vdrive->vq;
+    struct vring_virtqueue *vq = vdrive->vq[0];
     struct virtio_blk_outhdr hdr = {
         .type = write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN,
         .ioprio = 0,
@@ -96,6 +96,7 @@ virtio_blk_process_op(struct disk_op_s *op)
 static void
 init_virtio_blk(void *data)
 {
+    u32 i, num_queues = 1;
     struct pci_device *pci = data;
     u8 status = VIRTIO_CONFIG_S_ACKNOWLEDGE | VIRTIO_CONFIG_S_DRIVER;
     dprintf(1, "found virtio-blk at %pP\n", pci);
@@ -109,10 +110,6 @@ init_virtio_blk(void *data)
     vdrive->drive.cntl_id = pci->bdf;
 
     vp_init_simple(&vdrive->vp, pci);
-    if (vp_find_vq(&vdrive->vp, 0, &vdrive->vq) < 0 ) {
-        dprintf(1, "fail to find vq for virtio-blk %pP\n", pci);
-        goto fail;
-    }
 
     if (vdrive->vp.use_modern) {
         struct vp_device *vp = &vdrive->vp;
@@ -156,6 +153,11 @@ init_virtio_blk(void *data)
             vp_read(&vp->device, struct virtio_blk_config, heads);
         vdrive->drive.pchs.sector =
             vp_read(&vp->device, struct virtio_blk_config, sectors);
+
+        num_queues = vp_read(&vp->common, virtio_pci_common_cfg, num_queues);
+        if (num_queues < 1 || num_queues > MAX_NUM_QUEUES) {
+             num_queues = 1;
+        }
     } else {
         struct virtio_blk_config cfg;
         vp_get_legacy(&vdrive->vp, 0, &cfg, sizeof(cfg));
@@ -178,6 +180,13 @@ init_virtio_blk(void *data)
         vdrive->drive.pchs.sector = cfg.sectors;
     }
 
+    for (i = 0; i < num_queues; i++) {
+        if (vp_find_vq(&vdrive->vp, i, &vdrive->vq[i]) < 0 ) {
+            dprintf(1, "fail to find vq %u for virtio-blk %pP\n", i, pci);
+            goto fail_vq;
+        }
+    }
+
     char *desc = znprintf(MAXDESCSIZE, "Virtio disk PCI:%pP", pci);
     boot_add_hd(&vdrive->drive, desc, bootprio_find_pci_device(pci));
 
@@ -185,9 +194,12 @@ init_virtio_blk(void *data)
     vp_set_status(&vdrive->vp, status);
     return;
 
+fail_vq:
+    for (i = 0; i < num_queues; i++) {
+        free(vdrive->vq[i]);
+    }
 fail:
     vp_reset(&vdrive->vp);
-    free(vdrive->vq);
     free(vdrive);
 }
 
