@@ -15,10 +15,11 @@
 
 struct hlist_head PCIDevices VARVERIFY32INIT;
 int MaxPCIBus VARFSEG;
+int PXBHosts VARFSEG;
 
 // Find all PCI devices and populate PCIDevices linked list.
 void
-pci_probe_devices(void)
+pci_probe_devices(int domain_nr)
 {
     dprintf(3, "PCI probe\n");
     struct pci_device *busdevs[256];
@@ -29,7 +30,7 @@ pci_probe_devices(void)
     while (bus < 0xff && (bus < MaxPCIBus || rootbuses < extraroots)) {
         bus++;
         int bdf;
-        foreachbdf(bdf, bus) {
+        foreachbdf_dom(bdf, bus, domain_nr) {
             // Create new pci_device struct and add to list.
             struct pci_device *dev = malloc_tmp(sizeof(*dev));
             if (!dev) {
@@ -56,6 +57,7 @@ pci_probe_devices(void)
             }
 
             // Populate pci_device info.
+            dev->domain_nr = domain_nr;
             dev->bdf = bdf;
             dev->parent = parent;
             dev->rootbus = rootbus;
@@ -69,7 +71,7 @@ pci_probe_devices(void)
             dev->header_type = pci_config_readb(bdf, PCI_HEADER_TYPE);
             u8 v = dev->header_type & 0x7f;
             if (v == PCI_HEADER_TYPE_BRIDGE || v == PCI_HEADER_TYPE_CARDBUS) {
-                u8 secbus = pci_config_readb(bdf, PCI_SECONDARY_BUS);
+                u8 secbus = pci_config_readb_dom(bdf, PCI_SECONDARY_BUS, domain_nr);
                 dev->secondary_bus = secbus;
                 if (secbus > bus && !busdevs[secbus])
                     busdevs[secbus] = dev;
