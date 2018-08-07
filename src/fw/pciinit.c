@@ -525,9 +525,12 @@ static void pci_bios_init_platform(void)
 
 static u8 pci_find_resource_reserve_capability(u16 bdf)
 {
-    if (pci_config_readw(bdf, PCI_VENDOR_ID) == PCI_VENDOR_ID_REDHAT &&
-        pci_config_readw(bdf, PCI_DEVICE_ID) ==
-                PCI_DEVICE_ID_REDHAT_ROOT_PORT) {
+    u16 vendor_id = pci_config_readw(bdf, PCI_VENDOR_ID);
+    u16 device_id = pci_config_readw(bdf, PCI_DEVICE_ID);
+
+    if (vendor_id == PCI_VENDOR_ID_REDHAT &&
+        (device_id == PCI_DEVICE_ID_REDHAT_ROOT_PORT ||
+         device_id == PCI_DEVICE_ID_REDHAT_BRIDGE)) {
         u8 cap = 0;
         do {
             cap = pci_find_capability(bdf, PCI_CAP_ID_VNDR, cap);
