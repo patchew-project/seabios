@@ -233,6 +233,7 @@ esp_scsi_setup(void)
 
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->vendor != PCI_VENDOR_ID_AMD
             || pci->device != PCI_DEVICE_ID_AMD_SCSI)
             continue;

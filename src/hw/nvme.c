@@ -633,6 +633,7 @@ nvme_scan(void)
     struct pci_device *pci;
 
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class != PCI_CLASS_STORAGE_NVME)
             continue;
         if (pci->prog_if != 2 /* as of NVM 1.0e */) {

@@ -275,6 +275,7 @@ uhci_setup(void)
         return;
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci_classprog(pci) == PCI_CLASS_SERIAL_USB_UHCI)
             uhci_controller_setup(pci);
     }

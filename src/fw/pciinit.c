@@ -427,8 +427,7 @@ static void pci_bios_init_devices(int domain_nr)
 {
     struct pci_device *pci;
     foreachpci(pci) {
-        if (pci->domain_nr != domain_nr)
-            continue;
+        filter_domain(pci, domain_nr);
         pci_bios_init_device(pci);
     }
 }
@@ -438,6 +437,7 @@ static void pci_enable_default_vga(void)
     struct pci_device *pci;
 
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (is_pci_vga(pci)) {
             dprintf(1, "PCI: Using %pP for primary VGA\n", pci);
             return;
@@ -545,8 +545,7 @@ static void pci_bios_init_platform(int domain_nr)
 {
     struct pci_device *pci;
     foreachpci(pci) {
-        if (pci->domain_nr != domain_nr)
-            continue;
+        filter_domain(pci, domain_nr);
         pci_init_device(pci_platform_tbl, pci, NULL);
     }
 }
@@ -884,8 +883,7 @@ static int pci_bios_check_devices(struct pci_bus *busses, int domain_nr)
     // Calculate resources needed for regular (non-bus) devices.
     struct pci_device *pci;
     foreachpci(pci) {
-        if (pci->domain_nr != domain_nr)
-            continue;
+        filter_domain(pci, domain_nr);
         if (pci->class == PCI_CLASS_BRIDGE_PCI)
             busses[pci->secondary_bus].bus_dev = pci;
 

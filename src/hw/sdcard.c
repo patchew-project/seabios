@@ -564,6 +564,7 @@ sdcard_setup(void)
 
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class != PCI_CLASS_SYSTEM_SDHCI || pci->prog_if >= 2)
             // Not an SDHCI controller following SDHCI spec
             continue;

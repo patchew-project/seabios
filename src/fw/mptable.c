@@ -110,6 +110,7 @@ mptable_setup(void)
 
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         u16 bdf = pci->bdf;
         if (pci_bdf_to_bus(bdf) != 0)
             break;

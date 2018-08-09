@@ -91,6 +91,7 @@ pci_find_device(u16 vendid, u16 devid)
 {
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->vendor == vendid && pci->device == devid)
             return pci;
     }
@@ -103,6 +104,7 @@ pci_find_class(u16 classid)
 {
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class == classid)
             return pci;
     }
@@ -130,6 +132,7 @@ pci_find_init_device(const struct pci_device_id *ids, void *arg)
 {
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci_init_device(ids, pci, arg) == 0)
             return pci;
     }

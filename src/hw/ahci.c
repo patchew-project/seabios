@@ -677,6 +677,7 @@ ahci_scan(void)
     // Scan PCI bus for ATA adapters
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class != PCI_CLASS_STORAGE_SATA)
             continue;
         if (pci->prog_if != 1 /* AHCI rev 1 */)

@@ -1024,6 +1024,7 @@ ata_scan(void)
     // Scan PCI bus for ATA adapters
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         pci_init_device(pci_ata_tbl, pci, NULL);
     }
 }

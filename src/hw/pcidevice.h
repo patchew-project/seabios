@@ -32,6 +32,10 @@ static inline u32 pci_classprog(struct pci_device *pci) {
 #define foreachpci(PCI)                                 \
     hlist_for_each_entry(PCI, &PCIDevices, node)
 
+#define filter_domain(PCI, DOMAIN)                  \
+    if ((PCI)->domain_nr != (DOMAIN))                   \
+        continue;
+
 #define PCI_ANY_ID      (~0)
 struct pci_device_id {
     u32 vendid;

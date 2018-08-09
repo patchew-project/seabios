@@ -350,6 +350,7 @@ optionrom_setup(void)
     // Find and deploy PCI roms.
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class == PCI_CLASS_DISPLAY_VGA ||
             pci->class == PCI_CLASS_DISPLAY_OTHER ||
             pci->have_driver)
@@ -409,6 +410,7 @@ static void try_setup_display_other(void)
     dprintf(1, "No VGA found, scan for other display\n");
 
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (pci->class != PCI_CLASS_DISPLAY_OTHER)
             continue;
         struct rom_header *rom = map_pcirom(pci);
@@ -445,6 +447,7 @@ vgarom_setup(void)
     // Find and deploy PCI VGA rom.
     struct pci_device *pci;
     foreachpci(pci) {
+        filter_domain(pci, 0);
         if (!is_pci_vga(pci))
             continue;
         vgahook_setup(pci);
