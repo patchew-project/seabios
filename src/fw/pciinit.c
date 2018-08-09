@@ -507,11 +507,28 @@ static void mch_mem_addr_setup(struct pci_device *dev, void *arg)
         pci_io_low_end = acpi_pm_base;
 }
 
+static void pxb_mem_addr_setup(struct pci_device *dev, void *arg)
+{
+    union u64_u32_u mcfg_base;
+    mcfg_base.lo = pci_config_readl(dev->bdf, Q35_HOST_BRIDGE_PCIEXBAR);
+    mcfg_base.hi = pci_config_readl(dev->bdf, Q35_HOST_BRIDGE_PCIEXBAR + 4);
+
+    // Fix me! Use another meaningful macro
+    u32 mcfg_size = pci_config_readl(dev->bdf, Q35_HOST_BRIDGE_PCIEXBAR + 8);
+
+    /* Skip config write here as the qemu-level objects are already setup, we
+     * read mcfg_base and mcfg_size from it just now. Instead, we directly add
+     * this item to e820 */
+    e820_add(mcfg_base.val, mcfg_size, E820_RESERVED);
+}
+
 static const struct pci_device_id pci_platform_tbl[] = {
     PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441,
                i440fx_mem_addr_setup),
     PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_Q35_MCH,
                mch_mem_addr_setup),
+    PCI_DEVICE(PCI_VENDOR_ID_REDHAT, PCI_DEVICE_ID_REDHAT_PXB_HOST,
+               pxb_mem_addr_setup),
     PCI_DEVICE_END
 };
 
