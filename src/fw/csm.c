@@ -63,7 +63,7 @@ static void
 csm_maininit(struct bregs *regs)
 {
     interface_init();
-    pci_probe_devices();
+    pci_probe_devices(0);
 
     csm_compat_table.PnPInstallationCheckSegment = SEG_BIOS;
     csm_compat_table.PnPInstallationCheckOffset = get_pnp_offset();

@@ -11,72 +11,75 @@
 #include "util.h" // udelay
 #include "x86.h" // outl
 
-#define PORT_PCI_CMD           0x0cf8
-#define PORT_PCI_DATA          0x0cfc
-
-void pci_config_writel(u16 bdf, u32 addr, u32 val)
+void pci_config_writel_dom(u16 bdf, u32 addr, u32 val, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    outl(val, PORT_PCI_DATA);
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr ? PORT_PXB_CMD_BASE + ((domain_nr - 1) << 3) : PORT_PCI_CMD);
+    outl(val, (domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA));
 }
 
-void pci_config_writew(u16 bdf, u32 addr, u16 val)
+void pci_config_writew_dom(u16 bdf, u32 addr, u16 val, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    outw(val, PORT_PCI_DATA + (addr & 2));
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr == 0 ? PORT_PCI_CMD : PORT_PXB_CMD_BASE + (domain_nr << 3));
+    outw(val, (domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA) + (addr & 2));
 }
 
-void pci_config_writeb(u16 bdf, u32 addr, u8 val)
+void pci_config_writeb_dom(u16 bdf, u32 addr, u8 val, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    outb(val, PORT_PCI_DATA + (addr & 3));
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr ? PORT_PXB_CMD_BASE + ((domain_nr - 1) << 3) : PORT_PCI_CMD);
+    outb(val, (domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA) + (addr & 3));
 }
 
-u32 pci_config_readl(u16 bdf, u32 addr)
+u32 pci_config_readl_dom(u16 bdf, u32 addr, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    return inl(PORT_PCI_DATA);
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr ? PORT_PXB_CMD_BASE + ((domain_nr - 1) << 3) : PORT_PCI_CMD);
+    return inl((domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA));
 }
 
-u16 pci_config_readw(u16 bdf, u32 addr)
+u16 pci_config_readw_dom(u16 bdf, u32 addr, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    return inw(PORT_PCI_DATA + (addr & 2));
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr ? PORT_PXB_CMD_BASE + ((domain_nr - 1) << 3) : PORT_PCI_CMD);
+    return inw((domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA) + (addr & 2));
 }
 
-u8 pci_config_readb(u16 bdf, u32 addr)
+u8 pci_config_readb_dom(u16 bdf, u32 addr, int domain_nr)
 {
-    outl(0x80000000 | (bdf << 8) | (addr & 0xfc), PORT_PCI_CMD);
-    return inb(PORT_PCI_DATA + (addr & 3));
+    outl(0x80000000 | (bdf << 8) | (addr & 0xfc),
+         domain_nr ? PORT_PXB_CMD_BASE + ((domain_nr - 1) << 3) : PORT_PCI_CMD);
+    return inb((domain_nr ? PORT_PXB_DATA_BASE + ((domain_nr - 1) << 3) : PORT_PCI_DATA) + (addr & 3));
 }
 
 void
-pci_config_maskw(u16 bdf, u32 addr, u16 off, u16 on)
+pci_config_maskw_dom(u16 bdf, u32 addr, u16 off, u16 on, int domain_nr)
 {
-    u16 val = pci_config_readw(bdf, addr);
+    u16 val = pci_config_readw_dom(bdf, addr, domain_nr);
     val = (val & ~off) | on;
-    pci_config_writew(bdf, addr, val);
+    pci_config_writew_dom(bdf, addr, val, domain_nr);
 }
 
-u8 pci_find_capability(u16 bdf, u8 cap_id, u8 cap)
+u8 pci_find_capability_dom(u16 bdf, u8 cap_id, u8 cap, int domain_nr)
 {
     int i;
-    u16 status = pci_config_readw(bdf, PCI_STATUS);
+    u16 status = pci_config_readw_dom(bdf, PCI_STATUS, domain_nr);
 
     if (!(status & PCI_STATUS_CAP_LIST))
         return 0;
 
     if (cap == 0) {
         /* find first */
-        cap = pci_config_readb(bdf, PCI_CAPABILITY_LIST);
+        cap = pci_config_readb_dom(bdf, PCI_CAPABILITY_LIST, domain_nr);
     } else {
         /* find next */
-        cap = pci_config_readb(bdf, cap + PCI_CAP_LIST_NEXT);
+        cap = pci_config_readb_dom(bdf, cap + PCI_CAP_LIST_NEXT, domain_nr);
     }
     for (i = 0; cap && i <= 0xff; i++) {
-        if (pci_config_readb(bdf, cap + PCI_CAP_LIST_ID) == cap_id)
+        if (pci_config_readb_dom(bdf, cap + PCI_CAP_LIST_ID, domain_nr) == cap_id)
             return cap;
-        cap = pci_config_readb(bdf, cap + PCI_CAP_LIST_NEXT);
+        cap = pci_config_readb_dom(bdf, cap + PCI_CAP_LIST_NEXT, domain_nr);
     }
 
     return 0;
@@ -84,10 +87,10 @@ u8 pci_find_capability(u16 bdf, u8 cap_id, u8 cap)
 
 // Helper function for foreachbdf() macro - return next device
 int
-pci_next(int bdf, int bus)
+pci_next_dom(int bdf, int bus, int domain_nr)
 {
     if (pci_bdf_to_fn(bdf) == 0
-        && (pci_config_readb(bdf, PCI_HEADER_TYPE) & 0x80) == 0)
+        && (pci_config_readb_dom(bdf, PCI_HEADER_TYPE, domain_nr) & 0x80) == 0)
         // Last found device wasn't a multi-function device - skip to
         // the next device.
         bdf += 8;
@@ -98,7 +101,7 @@ pci_next(int bdf, int bus)
         if (pci_bdf_to_bus(bdf) != bus)
             return -1;
 
-        u16 v = pci_config_readw(bdf, PCI_VENDOR_ID);
+        u16 v = pci_config_readw_dom(bdf, PCI_VENDOR_ID, domain_nr);
         if (v != 0x0000 && v != 0xffff)
             // Device is present.
             return bdf;

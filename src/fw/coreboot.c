@@ -254,7 +254,7 @@ coreboot_platform_setup(void)
 {
     if (!CONFIG_COREBOOT)
         return;
-    pci_probe_devices();
+    pci_probe_devices(0);
 
     struct cb_memory *cbm = CBMemTable;
     if (!cbm)

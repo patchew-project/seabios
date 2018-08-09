@@ -51,6 +51,7 @@ u64 pcimem_end     = BUILD_PCIMEM_END;
 u64 pcimem64_start = BUILD_PCIMEM64_START;
 u64 pcimem64_end   = BUILD_PCIMEM64_END;
 u64 pci_io_low_end = 0xa000;
+u64 pxb_mcfg_size  = 0;
 
 struct pci_region_entry {
     struct pci_device *dev;
@@ -88,9 +89,9 @@ static void
 pci_set_io_region_addr(struct pci_device *pci, int bar, u64 addr, int is64)
 {
     u32 ofs = pci_bar(pci, bar);
-    pci_config_writel(pci->bdf, ofs, addr);
+    pci_config_writel_dom(pci->bdf, ofs, addr, pci->domain_nr);
     if (is64)
-        pci_config_writel(pci->bdf, ofs + 4, addr >> 32);
+        pci_config_writel_dom(pci->bdf, ofs + 4, addr >> 32, pci->domain_nr);
 }
 
 
@@ -405,25 +406,29 @@ static void pci_bios_init_device(struct pci_device *pci)
 
     /* map the interrupt */
     u16 bdf = pci->bdf;
-    int pin = pci_config_readb(bdf, PCI_INTERRUPT_PIN);
+    int pin = pci_config_readb_dom(bdf, PCI_INTERRUPT_PIN, pci->domain_nr);
     if (pin != 0)
-        pci_config_writeb(bdf, PCI_INTERRUPT_LINE, pci_slot_get_irq(pci, pin));
+        pci_config_writeb_dom(bdf, PCI_INTERRUPT_LINE, pci_slot_get_irq(pci, pin),
+                              pci->domain_nr);
 
     pci_init_device(pci_device_tbl, pci, NULL);
 
     /* enable memory mappings */
-    pci_config_maskw(bdf, PCI_COMMAND, 0,
-                     PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_SERR);
+    pci_config_maskw_dom(bdf, PCI_COMMAND, 0,
+                     PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_SERR,
+                     pci->domain_nr);
     /* enable SERR# for forwarding */
     if (pci->header_type & PCI_HEADER_TYPE_BRIDGE)
-        pci_config_maskw(bdf, PCI_BRIDGE_CONTROL, 0,
-                         PCI_BRIDGE_CTL_SERR);
+        pci_config_maskw_dom(bdf, PCI_BRIDGE_CONTROL, 0,
+                         PCI_BRIDGE_CTL_SERR, pci->domain_nr);
 }
 
-static void pci_bios_init_devices(void)
+static void pci_bios_init_devices(int domain_nr)
 {
     struct pci_device *pci;
     foreachpci(pci) {
+        if (pci->domain_nr != domain_nr)
+            continue;
         pci_bios_init_device(pci);
     }
 }
@@ -520,6 +525,10 @@ static void pxb_mem_addr_setup(struct pci_device *dev, void *arg)
      * read mcfg_base and mcfg_size from it just now. Instead, we directly add
      * this item to e820 */
     e820_add(mcfg_base.val, mcfg_size, E820_RESERVED);
+
+    /* Add PXBHosts so that we can can initialize them later */
+    ++PXBHosts;
+    pxb_mcfg_size += mcfg_size;
 }
 
 static const struct pci_device_id pci_platform_tbl[] = {
@@ -532,27 +541,31 @@ static const struct pci_device_id pci_platform_tbl[] = {
     PCI_DEVICE_END
 };
 
-static void pci_bios_init_platform(void)
+static void pci_bios_init_platform(int domain_nr)
 {
     struct pci_device *pci;
     foreachpci(pci) {
+        if (pci->domain_nr != domain_nr)
+            continue;
         pci_init_device(pci_platform_tbl, pci, NULL);
     }
 }
 
-static u8 pci_find_resource_reserve_capability(u16 bdf)
+static u8 pci_find_resource_reserve_capability(u16 bdf, int domain_nr)
 {
-    if (pci_config_readw(bdf, PCI_VENDOR_ID) == PCI_VENDOR_ID_REDHAT &&
-        pci_config_readw(bdf, PCI_DEVICE_ID) ==
-                PCI_DEVICE_ID_REDHAT_ROOT_PORT) {
+    if (pci_config_readw_dom(bdf, PCI_VENDOR_ID, domain_nr) == PCI_VENDOR_ID_REDHAT &&
+        (pci_config_readw_dom(bdf, PCI_DEVICE_ID, domain_nr) ==
+                PCI_DEVICE_ID_REDHAT_ROOT_PORT ||
+         pci_config_readw_dom(bdf, PCI_DEVICE_ID, domain_nr) ==
+                PCI_DEVICE_ID_REDHAT_PCIE_BRIDGE)) {
         u8 cap = 0;
         do {
-            cap = pci_find_capability(bdf, PCI_CAP_ID_VNDR, cap);
+            cap = pci_find_capability_dom(bdf, PCI_CAP_ID_VNDR, cap, domain_nr);
         } while (cap &&
-                 pci_config_readb(bdf, cap + PCI_CAP_REDHAT_TYPE_OFFSET) !=
+                 pci_config_readb_dom(bdf, cap + PCI_CAP_REDHAT_TYPE_OFFSET, domain_nr) !=
                         REDHAT_CAP_RESOURCE_RESERVE);
         if (cap) {
-            u8 cap_len = pci_config_readb(bdf, cap + PCI_CAP_FLAGS);
+            u8 cap_len = pci_config_readb_dom(bdf, cap + PCI_CAP_FLAGS, domain_nr);
             if (cap_len < RES_RESERVE_CAP_SIZE) {
                 dprintf(1, "PCI: QEMU resource reserve cap length %d is invalid\n",
                         cap_len);
@@ -570,7 +583,7 @@ static u8 pci_find_resource_reserve_capability(u16 bdf)
  ****************************************************************/
 
 static void
-pci_bios_init_bus_rec(int bus, u8 *pci_bus)
+pci_bios_init_bus_rec(int bus, u8 *pci_bus, int domain_nr)
 {
     int bdf;
     u16 class;
@@ -578,54 +591,54 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
     dprintf(1, "PCI: %s bus = 0x%x\n", __func__, bus);
 
     /* prevent accidental access to unintended devices */
-    foreachbdf(bdf, bus) {
-        class = pci_config_readw(bdf, PCI_CLASS_DEVICE);
+    foreachbdf_dom(bdf, bus, domain_nr) {
+        class = pci_config_readw_dom(bdf, PCI_CLASS_DEVICE, domain_nr);
         if (class == PCI_CLASS_BRIDGE_PCI) {
-            pci_config_writeb(bdf, PCI_SECONDARY_BUS, 255);
-            pci_config_writeb(bdf, PCI_SUBORDINATE_BUS, 0);
+            pci_config_writeb_dom(bdf, PCI_SECONDARY_BUS, 255, domain_nr);
+            pci_config_writeb_dom(bdf, PCI_SUBORDINATE_BUS, 0, domain_nr);
         }
     }
 
-    foreachbdf(bdf, bus) {
-        class = pci_config_readw(bdf, PCI_CLASS_DEVICE);
+    foreachbdf_dom(bdf, bus, domain_nr) {
+        class = pci_config_readw_dom(bdf, PCI_CLASS_DEVICE, domain_nr);
         if (class != PCI_CLASS_BRIDGE_PCI) {
             continue;
         }
         dprintf(1, "PCI: %s bdf = 0x%x\n", __func__, bdf);
 
-        u8 pribus = pci_config_readb(bdf, PCI_PRIMARY_BUS);
+        u8 pribus = pci_config_readb_dom(bdf, PCI_PRIMARY_BUS, domain_nr);
         if (pribus != bus) {
             dprintf(1, "PCI: primary bus = 0x%x -> 0x%x\n", pribus, bus);
-            pci_config_writeb(bdf, PCI_PRIMARY_BUS, bus);
+            pci_config_writeb_dom(bdf, PCI_PRIMARY_BUS, bus, domain_nr);
         } else {
             dprintf(1, "PCI: primary bus = 0x%x\n", pribus);
         }
 
-        u8 secbus = pci_config_readb(bdf, PCI_SECONDARY_BUS);
+        u8 secbus = pci_config_readb_dom(bdf, PCI_SECONDARY_BUS, domain_nr);
         (*pci_bus)++;
         if (*pci_bus != secbus) {
             dprintf(1, "PCI: secondary bus = 0x%x -> 0x%x\n",
                     secbus, *pci_bus);
             secbus = *pci_bus;
-            pci_config_writeb(bdf, PCI_SECONDARY_BUS, secbus);
+            pci_config_writeb_dom(bdf, PCI_SECONDARY_BUS, secbus, domain_nr);
         } else {
             dprintf(1, "PCI: secondary bus = 0x%x\n", secbus);
         }
 
         /* set to max for access to all subordinate buses.
            later set it to accurate value */
-        u8 subbus = pci_config_readb(bdf, PCI_SUBORDINATE_BUS);
-        pci_config_writeb(bdf, PCI_SUBORDINATE_BUS, 255);
+        u8 subbus = pci_config_readb_dom(bdf, PCI_SUBORDINATE_BUS, domain_nr);
+        pci_config_writeb_dom(bdf, PCI_SUBORDINATE_BUS, 255, domain_nr);
 
-        pci_bios_init_bus_rec(secbus, pci_bus);
+        pci_bios_init_bus_rec(secbus, pci_bus, domain_nr);
 
         if (subbus != *pci_bus) {
             u8 res_bus = *pci_bus;
-            u8 cap = pci_find_resource_reserve_capability(bdf);
+            u8 cap = pci_find_resource_reserve_capability(bdf, domain_nr);
 
             if (cap) {
-                u32 tmp_res_bus = pci_config_readl(bdf,
-                        cap + RES_RESERVE_BUS_RES);
+                u32 tmp_res_bus = pci_config_readl_dom(bdf,
+                        cap + RES_RESERVE_BUS_RES, domain_nr);
                 if (tmp_res_bus != (u32)-1) {
                     res_bus = tmp_res_bus & 0xFF;
                     if ((u8)(res_bus + secbus) < secbus ||
@@ -648,26 +661,24 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
         } else {
             dprintf(1, "PCI: subordinate bus = 0x%x\n", subbus);
         }
-        pci_config_writeb(bdf, PCI_SUBORDINATE_BUS, subbus);
+        pci_config_writeb_dom(bdf, PCI_SUBORDINATE_BUS, subbus, domain_nr);
     }
 }
 
 static void
-pci_bios_init_bus(void)
+pci_bios_init_bus(int domain_nr)
 {
-    u8 extraroots = romfile_loadint("etc/extra-pci-roots", 0);
     u8 pci_bus = 0;
 
-    pci_bios_init_bus_rec(0 /* host bus */, &pci_bus);
+    pci_bios_init_bus_rec(0 /* host bus */, &pci_bus, domain_nr);
 
-    if (extraroots) {
+    if (domain_nr) {
         while (pci_bus < 0xff) {
             pci_bus++;
-            pci_bios_init_bus_rec(pci_bus, &pci_bus);
+            pci_bios_init_bus_rec(pci_bus, &pci_bus, domain_nr);
         }
     }
 }
-
 
 /****************************************************************
  * Bus sizing
@@ -675,17 +686,18 @@ pci_bios_init_bus(void)
 
 static void
 pci_bios_get_bar(struct pci_device *pci, int bar,
-                 int *ptype, u64 *psize, int *pis64)
+                 int *ptype, u64 *psize, int *pis64,
+                 int domain_nr)
 {
     u32 ofs = pci_bar(pci, bar);
     u16 bdf = pci->bdf;
-    u32 old = pci_config_readl(bdf, ofs);
+    u32 old = pci_config_readl_dom(bdf, ofs, domain_nr);
     int is64 = 0, type = PCI_REGION_TYPE_MEM;
     u64 mask;
 
     if (bar == PCI_ROM_SLOT) {
         mask = PCI_ROM_ADDRESS_MASK;
-        pci_config_writel(bdf, ofs, mask);
+        pci_config_writel_dom(bdf, ofs, mask, domain_nr);
     } else {
         if (old & PCI_BASE_ADDRESS_SPACE_IO) {
             mask = PCI_BASE_ADDRESS_IO_MASK;
@@ -697,15 +709,15 @@ pci_bios_get_bar(struct pci_device *pci, int bar,
             is64 = ((old & PCI_BASE_ADDRESS_MEM_TYPE_MASK)
                     == PCI_BASE_ADDRESS_MEM_TYPE_64);
         }
-        pci_config_writel(bdf, ofs, ~0);
+        pci_config_writel_dom(bdf, ofs, ~0, domain_nr);
     }
-    u64 val = pci_config_readl(bdf, ofs);
-    pci_config_writel(bdf, ofs, old);
+    u64 val = pci_config_readl_dom(bdf, ofs, domain_nr);
+    pci_config_writel_dom(bdf, ofs, old, domain_nr);
     if (is64) {
-        u32 hold = pci_config_readl(bdf, ofs + 4);
-        pci_config_writel(bdf, ofs + 4, ~0);
-        u32 high = pci_config_readl(bdf, ofs + 4);
-        pci_config_writel(bdf, ofs + 4, hold);
+        u32 hold = pci_config_readl_dom(bdf, ofs + 4, domain_nr);
+        pci_config_writel_dom(bdf, ofs + 4, ~0, domain_nr);
+        u32 high = pci_config_readl_dom(bdf, ofs + 4, domain_nr);
+        pci_config_writel_dom(bdf, ofs + 4, hold, domain_nr);
         val |= ((u64)high << 32);
         mask |= ((u64)0xffffffff << 32);
         *psize = (~(val & mask)) + 1;
@@ -717,15 +729,20 @@ pci_bios_get_bar(struct pci_device *pci, int bar,
 }
 
 static int pci_bios_bridge_region_is64(struct pci_region *r,
-                                 struct pci_device *pci, int type)
+                                 struct pci_device *pci, int type,
+                                 int domain_nr)
 {
     if (type != PCI_REGION_TYPE_PREFMEM)
         return 0;
-    u32 pmem = pci_config_readl(pci->bdf, PCI_PREF_MEMORY_BASE);
+    u32 pmem = pci_config_readl_dom(pci->bdf, PCI_PREF_MEMORY_BASE,
+                                     domain_nr);
     if (!pmem) {
-        pci_config_writel(pci->bdf, PCI_PREF_MEMORY_BASE, 0xfff0fff0);
-        pmem = pci_config_readl(pci->bdf, PCI_PREF_MEMORY_BASE);
-        pci_config_writel(pci->bdf, PCI_PREF_MEMORY_BASE, 0x0);
+        pci_config_writel_dom(pci->bdf, PCI_PREF_MEMORY_BASE, 0xfff0fff0,
+                               domain_nr);
+        pmem = pci_config_readl_dom(pci->bdf, PCI_PREF_MEMORY_BASE,
+                               domain_nr);
+        pci_config_writel_dom(pci->bdf, PCI_PREF_MEMORY_BASE, 0x0,
+                               domain_nr);
     }
     if ((pmem & PCI_PREF_RANGE_TYPE_MASK) != PCI_PREF_RANGE_TYPE_64)
        return 0;
@@ -801,13 +818,15 @@ pci_region_create_entry(struct pci_bus *bus, struct pci_device *dev,
     return entry;
 }
 
-static int pci_bus_hotplug_support(struct pci_bus *bus, u8 pcie_cap)
+static int pci_bus_hotplug_support(struct pci_bus *bus, u8 pcie_cap,
+                                   int domain_nr)
 {
     u8 shpc_cap;
 
     if (pcie_cap) {
-        u16 pcie_flags = pci_config_readw(bus->bus_dev->bdf,
-                                          pcie_cap + PCI_EXP_FLAGS);
+        u16 pcie_flags = pci_config_readw_dom(bus->bus_dev->bdf,
+                                          pcie_cap + PCI_EXP_FLAGS,
+                                          domain_nr);
         u8 port_type = ((pcie_flags & PCI_EXP_FLAGS_TYPE) >>
                        (__builtin_ffs(PCI_EXP_FLAGS_TYPE) - 1));
         u8 downstream_port = (port_type == PCI_EXP_TYPE_DOWNSTREAM) ||
@@ -826,7 +845,8 @@ static int pci_bus_hotplug_support(struct pci_bus *bus, u8 pcie_cap)
         return downstream_port && slot_implemented;
     }
 
-    shpc_cap = pci_find_capability(bus->bus_dev->bdf, PCI_CAP_ID_SHPC, 0);
+    shpc_cap = pci_find_capability_dom(bus->bus_dev->bdf, PCI_CAP_ID_SHPC, 0,
+                                   domain_nr);
     return !!shpc_cap;
 }
 
@@ -835,7 +855,8 @@ static int pci_bus_hotplug_support(struct pci_bus *bus, u8 pcie_cap)
  * Note: disables bridge's window registers as a side effect.
  */
 static int pci_bridge_has_region(struct pci_device *pci,
-                                 enum pci_region_type region_type)
+                                 enum pci_region_type region_type,
+                                 int domain_nr)
 {
     u8 base;
 
@@ -851,18 +872,20 @@ static int pci_bridge_has_region(struct pci_device *pci,
             return 1;
     }
 
-    pci_config_writeb(pci->bdf, base, 0xFF);
+    pci_config_writeb_dom(pci->bdf, base, 0xFF, domain_nr);
 
-    return pci_config_readb(pci->bdf, base) != 0;
+    return pci_config_readb_dom(pci->bdf, base, domain_nr) != 0;
 }
 
-static int pci_bios_check_devices(struct pci_bus *busses)
+static int pci_bios_check_devices(struct pci_bus *busses, int domain_nr)
 {
     dprintf(1, "PCI: check devices\n");
 
     // Calculate resources needed for regular (non-bus) devices.
     struct pci_device *pci;
     foreachpci(pci) {
+        if (pci->domain_nr != domain_nr)
+            continue;
         if (pci->class == PCI_CLASS_BRIDGE_PCI)
             busses[pci->secondary_bus].bus_dev = pci;
 
@@ -879,7 +902,7 @@ static int pci_bios_check_devices(struct pci_bus *busses)
                 continue;
             int type, is64;
             u64 size;
-            pci_bios_get_bar(pci, i, &type, &size, &is64);
+            pci_bios_get_bar(pci, i, &type, &size, &is64, domain_nr);
             if (size == 0)
                 continue;
 
@@ -909,14 +932,14 @@ static int pci_bios_check_devices(struct pci_bus *busses)
             parent = &busses[0];
         int type;
         u16 bdf = s->bus_dev->bdf;
-        u8 pcie_cap = pci_find_capability(bdf, PCI_CAP_ID_EXP, 0);
-        u8 qemu_cap = pci_find_resource_reserve_capability(bdf);
+        u8 pcie_cap = pci_find_capability_dom(bdf, PCI_CAP_ID_EXP, 0, domain_nr);
+        u8 qemu_cap = pci_find_resource_reserve_capability(bdf, domain_nr);
 
-        int hotplug_support = pci_bus_hotplug_support(s, pcie_cap);
+        int hotplug_support = pci_bus_hotplug_support(s, pcie_cap, domain_nr);
         for (type = 0; type < PCI_REGION_TYPE_COUNT; type++) {
             u64 align = (type == PCI_REGION_TYPE_IO) ?
                 PCI_BRIDGE_IO_MIN : PCI_BRIDGE_MEM_MIN;
-            if (!pci_bridge_has_region(s->bus_dev, type))
+            if (!pci_bridge_has_region(s->bus_dev, type, domain_nr))
                 continue;
             u64 size = 0;
             if (qemu_cap) {
@@ -924,22 +947,25 @@ static int pci_bios_check_devices(struct pci_bus *busses)
                 u64 tmp_size_64;
                 switch(type) {
                 case PCI_REGION_TYPE_IO:
-                    tmp_size_64 = (pci_config_readl(bdf, qemu_cap + RES_RESERVE_IO) |
-                            (u64)pci_config_readl(bdf, qemu_cap + RES_RESERVE_IO + 4) << 32);
+                    tmp_size_64 = (pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_IO, domain_nr) |
+                            (u64)pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_IO + 4, domain_nr) << 32);
                     if (tmp_size_64 != (u64)-1) {
                         size = tmp_size_64;
                     }
                     break;
                 case PCI_REGION_TYPE_MEM:
-                    tmp_size = pci_config_readl(bdf, qemu_cap + RES_RESERVE_MEM);
+                    tmp_size = pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_MEM, domain_nr);
                     if (tmp_size != (u32)-1) {
                         size = tmp_size;
                     }
                     break;
                 case PCI_REGION_TYPE_PREFMEM:
-                    tmp_size = pci_config_readl(bdf, qemu_cap + RES_RESERVE_PREF_MEM_32);
-                    tmp_size_64 = (pci_config_readl(bdf, qemu_cap + RES_RESERVE_PREF_MEM_64) |
-                            (u64)pci_config_readl(bdf, qemu_cap + RES_RESERVE_PREF_MEM_64 + 4) << 32);
+                    tmp_size = pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_PREF_MEM_32,
+                                                     domain_nr);
+                    tmp_size_64 = (pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_PREF_MEM_64,
+                                                    domain_nr) |
+                              (u64)pci_config_readl_dom(bdf, qemu_cap + RES_RESERVE_PREF_MEM_64 + 4,
+                                                    domain_nr) << 32);
                     if (tmp_size != (u32)-1 && tmp_size_64 == (u64)-1) {
                         size = tmp_size;
                     } else if (tmp_size == (u32)-1 && tmp_size_64 != (u64)-1) {
@@ -970,7 +996,7 @@ static int pci_bios_check_devices(struct pci_bus *busses)
                 size = ALIGN(sum, align);
             }
             int is64 = pci_bios_bridge_region_is64(&s->r[type],
-                                            s->bus_dev, type);
+                                            s->bus_dev, type, domain_nr);
             // entry->bar is -1 if the entry represents a bridge region
             struct pci_region_entry *entry = pci_region_create_entry(
                 parent, s->bus_dev, -1, size, align, type, is64);
@@ -1048,7 +1074,7 @@ static int pci_bios_init_root_regions_mem(struct pci_bus *bus)
 #define PCI_PREF_MEMORY_SHIFT   16
 
 static void
-pci_region_map_one_entry(struct pci_region_entry *entry, u64 addr)
+pci_region_map_one_entry(struct pci_region_entry *entry, u64 addr, int domain_nr)
 {
     if (entry->bar >= 0) {
         dprintf(1, "PCI: map device bdf=%pP"
@@ -1063,24 +1089,24 @@ pci_region_map_one_entry(struct pci_region_entry *entry, u64 addr)
     u16 bdf = entry->dev->bdf;
     u64 limit = addr + entry->size - 1;
     if (entry->type == PCI_REGION_TYPE_IO) {
-        pci_config_writeb(bdf, PCI_IO_BASE, addr >> PCI_IO_SHIFT);
-        pci_config_writew(bdf, PCI_IO_BASE_UPPER16, 0);
-        pci_config_writeb(bdf, PCI_IO_LIMIT, limit >> PCI_IO_SHIFT);
-        pci_config_writew(bdf, PCI_IO_LIMIT_UPPER16, 0);
+        pci_config_writeb_dom(bdf, PCI_IO_BASE, addr >> PCI_IO_SHIFT, domain_nr);
+        pci_config_writew_dom(bdf, PCI_IO_BASE_UPPER16, 0, domain_nr);
+        pci_config_writeb_dom(bdf, PCI_IO_LIMIT, limit >> PCI_IO_SHIFT, domain_nr);
+        pci_config_writew_dom(bdf, PCI_IO_LIMIT_UPPER16, 0, domain_nr);
     }
     if (entry->type == PCI_REGION_TYPE_MEM) {
-        pci_config_writew(bdf, PCI_MEMORY_BASE, addr >> PCI_MEMORY_SHIFT);
-        pci_config_writew(bdf, PCI_MEMORY_LIMIT, limit >> PCI_MEMORY_SHIFT);
+        pci_config_writew_dom(bdf, PCI_MEMORY_BASE, addr >> PCI_MEMORY_SHIFT, domain_nr);
+        pci_config_writew_dom(bdf, PCI_MEMORY_LIMIT, limit >> PCI_MEMORY_SHIFT, domain_nr);
     }
     if (entry->type == PCI_REGION_TYPE_PREFMEM) {
-        pci_config_writew(bdf, PCI_PREF_MEMORY_BASE, addr >> PCI_PREF_MEMORY_SHIFT);
-        pci_config_writew(bdf, PCI_PREF_MEMORY_LIMIT, limit >> PCI_PREF_MEMORY_SHIFT);
-        pci_config_writel(bdf, PCI_PREF_BASE_UPPER32, addr >> 32);
-        pci_config_writel(bdf, PCI_PREF_LIMIT_UPPER32, limit >> 32);
+        pci_config_writew_dom(bdf, PCI_PREF_MEMORY_BASE, addr >> PCI_PREF_MEMORY_SHIFT, domain_nr);
+        pci_config_writew_dom(bdf, PCI_PREF_MEMORY_LIMIT, limit >> PCI_PREF_MEMORY_SHIFT, domain_nr);
+        pci_config_writel_dom(bdf, PCI_PREF_BASE_UPPER32, addr >> 32, domain_nr);
+        pci_config_writel_dom(bdf, PCI_PREF_LIMIT_UPPER32, limit >> 32, domain_nr);
     }
 }
 
-static void pci_region_map_entries(struct pci_bus *busses, struct pci_region *r)
+static void pci_region_map_entries(struct pci_bus *busses, struct pci_region *r, int domain_nr)
 {
     struct hlist_node *n;
     struct pci_region_entry *entry;
@@ -1090,13 +1116,13 @@ static void pci_region_map_entries(struct pci_bus *busses, struct pci_region *r)
         if (entry->bar == -1)
             // Update bus base address if entry is a bridge region
             busses[entry->dev->secondary_bus].r[entry->type].base = addr;
-        pci_region_map_one_entry(entry, addr);
+        pci_region_map_one_entry(entry, addr, domain_nr);
         hlist_del(&entry->node);
         free(entry);
     }
 }
 
-static void pci_bios_map_devices(struct pci_bus *busses)
+static void pci_bios_map_devices(struct pci_bus *busses, int domain_nr)
 {
     if (pci_bios_init_root_regions_io(busses))
         panic("PCI: out of I/O address space\n");
@@ -1127,13 +1153,13 @@ static void pci_bios_map_devices(struct pci_bus *busses)
         r64_pref.base = r64_mem.base + sum_mem;
         r64_pref.base = ALIGN(r64_pref.base, align_pref);
         r64_pref.base = ALIGN(r64_pref.base, (1LL<<30));  // 1G hugepage
-        pcimem64_start = r64_mem.base;
-        pcimem64_end = r64_pref.base + sum_pref;
+        pcimem64_start = r64_mem.base + pxb_mcfg_size;
+        pcimem64_end = r64_pref.base + sum_pref + pxb_mcfg_size;
         pcimem64_end = ALIGN(pcimem64_end, (1LL<<30));    // 1G hugepage
         dprintf(1, "PCI: 64: %016llx - %016llx\n", pcimem64_start, pcimem64_end);
 
-        pci_region_map_entries(busses, &r64_mem);
-        pci_region_map_entries(busses, &r64_pref);
+        pci_region_map_entries(busses, &r64_mem, domain_nr);
+        pci_region_map_entries(busses, &r64_pref, domain_nr);
     } else {
         // no bars mapped high -> drop 64bit window (see dsdt)
         pcimem64_start = 0;
@@ -1143,7 +1169,7 @@ static void pci_bios_map_devices(struct pci_bus *busses)
     for (bus = 0; bus<=MaxPCIBus; bus++) {
         int type;
         for (type = 0; type < PCI_REGION_TYPE_COUNT; type++)
-            pci_region_map_entries(busses, &busses[bus].r[type]);
+            pci_region_map_entries(busses, &busses[bus].r[type], domain_nr);
     }
 }
 
@@ -1164,30 +1190,35 @@ pci_setup(void)
     if (pci_probe_host() != 0) {
         return;
     }
-    pci_bios_init_bus();
 
-    dprintf(1, "=== PCI device probing ===\n");
-    pci_probe_devices();
+    u8 extraroots = romfile_loadint("etc/extra-pci-roots", 0);
+    int domain_nr;
+    /* q35 host is in domain 0, pxb hosts in domain >= 1*/
+    for (domain_nr = 0; domain_nr <= extraroots; ++domain_nr) {
+        pci_bios_init_bus(domain_nr);
 
-    pcimem_start = RamSize;
-    pci_bios_init_platform();
+        dprintf(1, "=== PCI device probing ===\n");
+        pci_probe_devices(domain_nr);
 
-    dprintf(1, "=== PCI new allocation pass #1 ===\n");
-    struct pci_bus *busses = malloc_tmp(sizeof(*busses) * (MaxPCIBus + 1));
-    if (!busses) {
-        warn_noalloc();
-        return;
+        pcimem_start = RamSize;
+        pci_bios_init_platform(domain_nr);
+
+        dprintf(1, "=== [domain %d] PCI new allocation pass #1 ===\n", domain_nr);
+        struct pci_bus *busses = malloc_tmp(sizeof(*busses) * (MaxPCIBus + 1));
+        if (!busses) {
+            warn_noalloc();
+            return;
+        }
+        memset(busses, 0, sizeof(*busses) * (MaxPCIBus + 1));
+        if (pci_bios_check_devices(busses, domain_nr))
+            return;
+
+        dprintf(1, "=== [domain %d] PCI new allocation pass #2 ===\n", domain_nr);
+        pci_bios_map_devices(busses, domain_nr);
+
+        pci_bios_init_devices(domain_nr);
+        free(busses);
     }
-    memset(busses, 0, sizeof(*busses) * (MaxPCIBus + 1));
-    if (pci_bios_check_devices(busses))
-        return;
-
-    dprintf(1, "=== PCI new allocation pass #2 ===\n");
-    pci_bios_map_devices(busses);
-
-    pci_bios_init_devices();
-
-    free(busses);
 
     pci_enable_default_vga();
 }

@@ -5,6 +5,7 @@
 #include "list.h" // hlist_node
 
 struct pci_device {
+    u32 domain_nr;
     u16 bdf;
     u8 rootbus;
     struct hlist_node node;
@@ -22,6 +23,7 @@ struct pci_device {
 };
 extern struct hlist_head PCIDevices;
 extern int MaxPCIBus;
+extern int PXBHosts;
 
 static inline u32 pci_classprog(struct pci_device *pci) {
     return (pci->class << 8) | pci->prog_if;
@@ -62,7 +64,7 @@ struct pci_device_id {
         .vendid = 0,                            \
     }
 
-void pci_probe_devices(void);
+void pci_probe_devices(int domain_nr);
 struct pci_device *pci_find_device(u16 vendid, u16 devid);
 struct pci_device *pci_find_class(u16 classid);
 int pci_init_device(const struct pci_device_id *ids
