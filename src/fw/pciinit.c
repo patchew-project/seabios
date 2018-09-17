@@ -51,6 +51,7 @@ u64 pcimem_end     = BUILD_PCIMEM_END;
 u64 pcimem64_start = BUILD_PCIMEM64_START;
 u64 pcimem64_end   = BUILD_PCIMEM64_END;
 u64 pci_io_low_end = 0xa000;
+u64 pxb_pcie_mcfg_base = PXB_PCIE_HOST_BRIDGE_MCFG_SIZE_ADDR;
 
 struct pci_region_entry {
     struct pci_device *dev;
@@ -507,11 +508,42 @@ static void mch_mem_addr_setup(struct pci_device *dev, void *arg)
         pci_io_low_end = acpi_pm_base;
 }
 
+static void pxb_pcie_mem_addr_setup(struct pci_device *dev, void *arg)
+{
+    u64 mcfg_base;
+    u32 mcfg_size = pci_config_readl(dev->bdf, PXB_PCIE_HOST_BRIDGE_MCFG_SIZE);
+
+    /* 0 means this pxb-pcie still resides in pci domain 0 */
+    if (mcfg_size == 0)
+        return;
+
+    if (pxb_pcie_mcfg_base + mcfg_size >
+                             PXB_PCIE_HOST_BRIDGE_MCFG_SIZE_ADDR_UPPER) {
+        dprintf(1, "PCI: Not enough space to hold new pci domains\n");
+        return;
+    }
+
+    mcfg_base = pxb_pcie_mcfg_base;
+    pxb_pcie_mcfg_base += mcfg_size;
+
+    /* First clear old mmio, taken care of by QEMU */
+    pci_config_writel(dev->bdf, PXB_PCIE_HOST_BRIDGE_MCFG_BAR, 0);
+    /* Update MCFG base */
+    pci_config_writel(dev->bdf, PXB_PCIE_HOST_BRIDGE_MCFG_BAR + 4,
+                      mcfg_base >> 32);
+    pci_config_writel(dev->bdf, PXB_PCIE_HOST_BRIDGE_MCFG_BAR,
+                      (mcfg_base & 0xffffffff) | PXB_PCIE_HOST_BRIDGE_ENABLE);
+
+    e820_add(mcfg_base, mcfg_size, E820_RESERVED);
+}
+
 static const struct pci_device_id pci_platform_tbl[] = {
     PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441,
                i440fx_mem_addr_setup),
     PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_Q35_MCH,
                mch_mem_addr_setup),
+    PCI_DEVICE(PCI_VENDOR_ID_REDHAT, PCI_DEVICE_ID_REDHAT_PXB_HOST,
+               pxb_pcie_mem_addr_setup),
     PCI_DEVICE_END
 };
 

@@ -49,4 +49,11 @@
 #define ICH9_APM_ACPI_ENABLE           0x2
 #define ICH9_APM_ACPI_DISABLE          0x3
 
+#define PXB_PCIE_HOST_BRIDGE_MCFG_BAR              0x50    /* 64bit register */
+#define PXB_PCIE_HOST_BRIDGE_MCFG_SIZE             0x58    /* 32bit register */
+#define PXB_PCIE_HOST_BRIDGE_ENABLE                Q35_HOST_BRIDGE_PCIEXBAREN
+/* pxb-pcie can use [0x80000000, 0xb0000000), be careful not to overflow */
+#define PXB_PCIE_HOST_BRIDGE_MCFG_SIZE_ADDR        0x80000000
+#define PXB_PCIE_HOST_BRIDGE_MCFG_SIZE_ADDR_UPPER Q35_HOST_BRIDGE_PCIEXBAR_ADDR
+
 #endif // dev-q35.h
