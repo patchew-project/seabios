@@ -274,3 +274,54 @@ cdrom_boot(struct drive_s *drive)
 
     return 0;
 }
+
+// go figure some cdrom information, for a pretty boot menu entry.
+char*
+cdrom_media_info(struct drive_s *drive)
+{
+    ASSERT32FLAT();
+
+    struct disk_op_s dop;
+    memset(&dop, 0, sizeof(dop));
+    dop.drive_fl = drive;
+
+    int ret = scsi_is_ready(&dop);
+    if (ret)
+        return "empty";
+
+    // Read the Boot Record Volume Descriptor
+    u8 buffer[CDROM_SECTOR_SIZE];
+    dop.command = CMD_READ;
+    dop.lba = 0x11;
+    dop.count = 1;
+    dop.buf_fl = buffer;
+    ret = process_op(&dop);
+    if (ret)
+        return "read error";
+
+    // Is it bootable?
+    if (buffer[0])
+        return "not bootable";
+    if (strcmp((char*)&buffer[1], "CD001\001EL TORITO SPECIFICATION") != 0)
+        return "not bootable";
+
+    // Read the Primary Volume Descriptor
+    dop.command = CMD_READ;
+    dop.lba = 0x10;
+    dop.count = 1;
+    dop.buf_fl = buffer;
+    ret = process_op(&dop);
+    if (ret)
+        return "read error";
+
+    // Read volume id, trim trailing spaces
+    char *volume = znprintf(30, "%s", buffer + 40);
+    char *h = volume + strlen(volume);
+    while (h > volume) {
+        h--;
+        if (*h != ' ')
+            break;
+        *h = 0;
+    }
+    return volume;
+}
