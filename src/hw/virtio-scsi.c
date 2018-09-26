@@ -148,9 +148,10 @@ virtio_scsi_scan_target(struct pci_device *pci, struct vp_device *vp,
 static void
 init_virtio_scsi(void *data)
 {
+    u32 i, num_queues = 3;
     struct pci_device *pci = data;
     dprintf(1, "found virtio-scsi at %pP\n", pci);
-    struct vring_virtqueue *vq = NULL;
+    struct vring_virtqueue *vq[MAX_NUM_QUEUES];
     struct vp_device *vp = malloc_high(sizeof(*vp));
     if (!vp) {
         warn_noalloc();
@@ -175,29 +176,38 @@ init_virtio_scsi(void *data)
             dprintf(1, "device didn't accept features: %pP\n", pci);
             goto fail;
         }
+
+	num_queues = vp_read(&vp->common, virtio_pci_common_cfg, num_queues);
+        if (num_queues < 3 || num_queues > MAX_NUM_QUEUES) {
+             num_queues = 3;
+        }
     }
 
-    if (vp_find_vq(vp, 2, &vq) < 0 ) {
-        dprintf(1, "fail to find vq for virtio-scsi %pP\n", pci);
-        goto fail;
+    for (i = 0; i < num_queues; i++) {
+        if (vp_find_vq(vp, i, &vq[i]) < 0 ) {
+            dprintf(1, "fail to find vq %u for virtio-scsi %pP\n", i, pci);
+            goto fail;
+        }
     }
 
     status |= VIRTIO_CONFIG_S_DRIVER_OK;
     vp_set_status(vp, status);
 
-    int i, tot;
+    int tot;
     for (tot = 0, i = 0; i < 256; i++)
-        tot += virtio_scsi_scan_target(pci, vp, vq, i);
+        tot += virtio_scsi_scan_target(pci, vp, vq[2], i);
 
     if (!tot)
-        goto fail;
+        goto fail_vq;
 
     return;
-
+fail_vq:
+    for (i = 0; i < num_queues; i++) {
+        free(vq[i]);
+    }
 fail:
     vp_reset(vp);
     free(vp);
-    free(vq);
 }
 
 void
