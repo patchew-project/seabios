@@ -31,7 +31,10 @@ static inline void *malloc_low(u32 size) {
     return _malloc(&ZoneLow, size, MALLOC_MIN_ALIGN);
 }
 static inline void *malloc_high(u32 size) {
-    return _malloc(&ZoneHigh, size, MALLOC_MIN_ALIGN);
+    void *ret = _malloc(&ZoneHigh, size, MALLOC_MIN_ALIGN);
+    if (ret)
+        return ret;
+    return malloc_low(size);
 }
 static inline void *malloc_fseg(u32 size) {
     return _malloc(&ZoneFSeg, size, MALLOC_MIN_ALIGN);
@@ -52,7 +55,10 @@ static inline void *memalign_low(u32 align, u32 size) {
     return _malloc(&ZoneLow, size, align);
 }
 static inline void *memalign_high(u32 align, u32 size) {
-    return _malloc(&ZoneHigh, size, align);
+    void *ret = _malloc(&ZoneHigh, size, align);
+    if (ret)
+        return ret;
+    return memalign_low(align, size);
 }
 static inline void *memalign_tmplow(u32 align, u32 size) {
     return _malloc(&ZoneTmpLow, size, align);
