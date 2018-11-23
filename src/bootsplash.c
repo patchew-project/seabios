@@ -8,6 +8,7 @@
 #include "bregs.h" // struct bregs
 #include "config.h" // CONFIG_*
 #include "farptr.h" // FLATPTR_TO_SEG
+#include "fw/paravirt.h" // runningOnQEMUFastBoot
 #include "malloc.h" // free
 #include "output.h" // dprintf
 #include "romfile.h" // romfile_loadfile
@@ -39,6 +40,8 @@ call16_int10(struct bregs *br)
 void
 enable_vga_console(void)
 {
+    if(runningOnQEMUFastBoot())
+        return;
     dprintf(1, "Turning on vga text mode console\n");
     struct bregs br;
 

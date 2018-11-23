@@ -9,6 +9,7 @@
 #define PF_QEMU     (1<<0)
 #define PF_XEN      (1<<1)
 #define PF_KVM      (1<<2)
+#define PF_QEMU_FB  (1<<3)
 
 typedef struct QemuCfgDmaAccess {
     u32 control;
@@ -23,6 +24,9 @@ extern int PlatformRunningOn;
 static inline int runningOnQEMU(void) {
     return CONFIG_QEMU || (
         CONFIG_QEMU_HARDWARE && GET_GLOBAL(PlatformRunningOn) & PF_QEMU);
+}
+static inline int runningOnQEMUFastBoot(void) {
+    return runningOnQEMU() && GET_GLOBAL(PlatformRunningOn) & PF_QEMU_FB;
 }
 static inline int runningOnXen(void) {
     return CONFIG_XEN && GET_GLOBAL(PlatformRunningOn) & PF_XEN;

@@ -126,6 +126,9 @@ interface_init(void)
 void
 device_hardware_setup(void)
 {
+    if(runningOnQEMUFastBoot())
+        return;
+
     usb_setup();
     ps2port_setup();
     block_setup();
