@@ -621,4 +621,14 @@ void qemu_cfg_init(void)
     if (nogfx && !romfile_find("etc/sercon-port")
         && !romfile_find("vgaroms/sgabios.bin"))
         const_romfile_add_int("etc/sercon-port", PORT_SERIAL1);
+
+    /*
+     * Enable QEMU fast boot if there is "linuxboot" optionrom and
+     * the boot menu is not required.
+     */
+    if ((romfile_find("genroms/linuxboot_dma.bin")
+        || romfile_find("genroms/linuxboot.bin"))
+        && !romfile_loadint("etc/show-boot-menu", 1)) {
+        PlatformRunningOn |= PF_QEMU_FB;
+    }
 }
