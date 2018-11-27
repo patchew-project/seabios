@@ -8,6 +8,7 @@
 #include "bregs.h" // struct bregs
 #include "config.h" // CONFIG_*
 #include "farptr.h" // FLATPTR_TO_SEG
+#include "biosvar.h" // GET_IVT
 #include "hw/pci.h" // pci_config_readl
 #include "hw/pcidevice.h" // foreachpci
 #include "hw/pci_ids.h" // PCI_CLASS_DISPLAY_VGA
@@ -136,9 +137,24 @@ init_optionrom(struct rom_header *rom, u16 bdf, int isvga)
 
     tpm_option_rom(newrom, rom->size * 512);
 
-    if (isvga || get_pnp_rom(newrom))
+    struct pnp_data *pnp = get_pnp_rom(newrom);
+    if (isvga || pnp) {
+        struct segoff_s old19, new19;
         // Only init vga and PnP roms here.
+        old19 = GET_IVT(0x19);
         callrom(newrom, bdf);
+        new19 = GET_IVT(0x19);
+        if (old19.seg != new19.seg ||
+            old19.offset != new19.offset) {
+            dprintf(1, "WARNING! rom tried to hijack int19 "
+                    "(vec %04x:%04x, pnp %s, bev %s, bvc %s)\n",
+                    new19.seg, new19.offset,
+                    pnp             ? "yes" : "no",
+                    pnp && pnp->bev ? "yes" : "no",
+                    pnp && pnp->bcv ? "yes" : "no");
+            SET_IVT(0x19, old19);
+        }
+    }
 
     return rom_confirm(newrom->size * 512);
 }
