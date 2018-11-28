@@ -124,7 +124,7 @@ mpt_scsi_cmd(u32 iobase, struct disk_op_s *op,
     struct scsi_req {
         MptSCSIIORequest_t      scsi_io;
         MptSGEntrySimple32_t    sge;
-    } __attribute__((packed, aligned(4))) req = {
+    } __attribute__((packed, aligned(8))) req = {
         .scsi_io = {
             .TargetID = target,
             .Bus = 0,
