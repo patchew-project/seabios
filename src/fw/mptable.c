@@ -72,25 +72,30 @@ mptable_setup(void)
     }
     int entrycount = cpu - cpus;
 
-    // PCI bus
+    // PCI buses
     struct mpt_bus *buses = (void*)cpu, *bus = buses;
-    if (!hlist_empty(&PCIDevices)) {
+    int lastbus = -1;
+    struct pci_device *pci;
+    foreachpci(pci) {
+        int curbus = pci_bdf_to_bus(pci->bdf);
+        if (curbus == lastbus)
+            continue;
+        lastbus = curbus;
         memset(bus, 0, sizeof(*bus));
         bus->type = MPT_TYPE_BUS;
-        bus->busid = 0;
+        bus->busid = curbus;
         memcpy(bus->bustype, "PCI   ", sizeof(bus->bustype));
         bus++;
-        entrycount++;
     }
 
     /* isa bus */
-    int isabusid = bus - buses;
+    int isabusid;
     memset(bus, 0, sizeof(*bus));
     bus->type = MPT_TYPE_BUS;
-    bus->busid = isabusid;
+    isabusid = bus->busid = lastbus + 1;
     memcpy(bus->bustype, "ISA   ", sizeof(bus->bustype));
     bus++;
-    entrycount++;
+    entrycount += bus - buses;
 
     /* ioapic */
     u8 ioapic_id = BUILD_IOAPIC_ID;
@@ -108,11 +113,8 @@ mptable_setup(void)
     int dev = -1;
     unsigned short pinmask = 0;
 
-    struct pci_device *pci;
     foreachpci(pci) {
         u16 bdf = pci->bdf;
-        if (pci_bdf_to_bus(bdf) != 0)
-            break;
         int pin = pci_config_readb(bdf, PCI_INTERRUPT_PIN);
         int irq = pci_config_readb(bdf, PCI_INTERRUPT_LINE);
         if (pin == 0)
