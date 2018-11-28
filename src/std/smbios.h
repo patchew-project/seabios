@@ -100,6 +100,18 @@ struct smbios_type_4 {
     u16 l3_cache_handle;
 } PACKED;
 
+/* SMBIOS type 6 - Memory Module Information */
+struct smbios_type_6 {
+    struct smbios_structure_header header;
+    u8 socket_designation_str;
+    u8 bank_connection;
+    u8 current_speed;
+    u16 memory_type;
+    u8 installed_size;
+    u8 enabled_size;
+    u8 error_status;
+} PACKED;
+
 /* SMBIOS type 16 - Physical Memory Array
  *   Associated with one type 17 (Memory Device).
  */

@@ -348,6 +348,51 @@ smbios_init_type_4(void *start, unsigned int cpu_number)
     return end;
 }
 
+/* Type 6 -- Memory Module Information */
+static void *
+smbios_init_type_6(void *start, u32 size_mb, int instance)
+{
+    struct smbios_type_6 *p = (struct smbios_type_6 *)start;
+    char *end = (char *)start + sizeof(struct smbios_type_6);
+    u8 size_mem = 0;
+    char name[1024];
+    int str_index = 0;
+
+    p->header.type = 6;
+    p->header.length = sizeof(struct smbios_type_6);
+    p->header.handle = 0x600 + instance;
+
+    snprintf(name, sizeof(name), "RAM socket #%2x", instance);
+
+    memcpy(end, name, strlen(name) + 1);
+    end += strlen(name) + 1;
+    p->socket_designation_str = ++str_index;
+
+    set_field_with_default(6, bank_connection, 0xff); /* No connection */
+    set_field_with_default(6, current_speed, 0); /* Unknown Speed */
+    set_field_with_default(6, memory_type, 0x400); /* SDRAM */
+
+    /* size_mem = n, where 2**n = size_mb */
+    size_mb = size_mb >> 1;
+    while (size_mb) {
+        ++size_mem;
+        size_mb = size_mb >> 1;
+    }
+
+    p->installed_size = size_mem;
+    p->enabled_size = size_mem;
+    set_field_with_default(6, error_status, 0);
+
+    *end = 0;
+    end++;
+    if (!str_index) {
+        *end = 0;
+        end++;
+    }
+
+    return end;
+}
+
 /* Type 16 -- Physical Memory Array */
 static void *
 smbios_init_type_16(void *start, u32 memory_size_mb, int nr_mem_devs)
@@ -550,6 +595,7 @@ smbios_legacy_setup(void)
         u32 dev_mb = ((i == (nr_mem_devs - 1))
                       ? (((ram_mb - 1) & 0x3fff) + 1)
                       : 16384);
+        add_struct(6, p, dev_mb, i);
         add_struct(17, p, dev_mb, i);
     }
 
