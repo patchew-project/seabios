@@ -332,6 +332,9 @@ handle_post(void)
     // Allow writes to modify bios area (0xf0000)
     make_bios_writable();
 
+    // Setup QEMU debug output port
+    qemu_debug_postram_preinit();
+
     // Now that memory is read/writable - start post process.
     dopost();
 }

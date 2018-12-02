@@ -103,11 +103,23 @@ serial_debug_flush(void)
 
 u16 DebugOutputPort VARFSEG = 0x402;
 
+void
+qemu_debug_postram_preinit(void)
+{
+    /* Check if the QEMU debug output port is active */
+    if (CONFIG_DEBUG_IO &&
+        inb(GET_GLOBAL(DebugOutputPort)) != QEMU_DEBUGCON_READBACK)
+        DebugOutputPort = 0;
+}
+
 // Write a character to the special debugging port.
 void
 qemu_debug_putc(char c)
 {
-    if (CONFIG_DEBUG_IO && runningOnQEMU())
+    u16 port;
+
+    if (CONFIG_DEBUG_IO && runningOnQEMU() &&
+        (port = GET_GLOBAL(DebugOutputPort)))
         // Send character to debug port.
-        outb(c, GET_GLOBAL(DebugOutputPort));
+        outb(c, port);
 }
