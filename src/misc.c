@@ -160,6 +160,14 @@ u64 rombios32_gdt[] VARFSEG __aligned(8) = {
     GDT_GRANLIMIT(0xffffffff) | GDT_CODE | GDT_BASE(BUILD_BIOS_ADDR),
     // 16 bit data segment base=0 limit=0xffffffff (SEG32_MODE16BIG_DS)
     GDT_GRANLIMIT(0xffffffff) | GDT_DATA,
+
+    //
+    // Following segments are used when enabling shadow memory
+    // where we need to execute code strictly from base 0xFFF00000
+    //
+
+    // 32 bit code segment in high memory
+    GDT_GRANLIMIT(0xfffff) | GDT_CODE | GDT_B | GDT_BASE(BIOS_SRC_OFFSET),
 };
 
 // GDT descriptor

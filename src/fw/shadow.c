@@ -18,9 +18,6 @@
 #include "util.h" // make_bios_writable
 #include "x86.h" // wbinvd
 
-// On the emulators, the bios at 0xf0000 is also at 0xffff0000
-#define BIOS_SRC_OFFSET 0xfff00000
-
 union pamdata_u {
     u8 data8[8];
     u32 data32[2];
@@ -56,6 +53,30 @@ __make_bios_writable_intel(u16 bdf, u32 pam0)
                , SYMBOL(code32flat_end) - SYMBOL(code32flat_start));
 }
 
+// A wrapper for executing __make_bios_writable_intel in high memory code segment
+static void
+__make_bios_writable_intel_highmem(u16 bdf, u32 pam0)
+{
+    // Save whatever CS segment we've had before entering here
+    // and switch to highmem code
+    u16 prev_cs;
+    __asm__ __volatile__ ("mov  %%cs, %0":"=rm"(prev_cs));
+    __asm__ __volatile__ ("ljmp %0, $__make_bios_writable_intel_highmem__enter\n"
+                          "__make_bios_writable_intel_highmem__enter:\n"
+                          :
+                          : "n"(SEG32_MODE32_HIGH_CS));
+
+    __make_bios_writable_intel(bdf, pam0);
+
+    // Far jump to return to previous segment
+    __asm__ __volatile__ ("push %0\n"
+                          "push $__make_bios_writable_intel_highmem__exit\n"
+                          "retf\n"
+                          "__make_bios_writable_intel_highmem__exit:\n"
+                          :
+                          : "rm"((u32)prev_cs));
+}
+
 static void
 make_bios_writable_intel(u16 bdf, u32 pam0)
 {
@@ -65,13 +86,11 @@ make_bios_writable_intel(u16 bdf, u32 pam0)
         // if ram isn't backing the bios segment when shadowing is
         // disabled, the code itself won't be in memory.  So, run the
         // code from the high-memory flash location.
-        u32 pos = (u32)__make_bios_writable_intel + BIOS_SRC_OFFSET;
-        void (*func)(u16 bdf, u32 pam0) = (void*)pos;
-        func(bdf, pam0);
-        return;
+        __make_bios_writable_intel_highmem(bdf, pam0);
+    } else {
+        // Ram already present - just enable writes
+        __make_bios_writable_intel(bdf, pam0);
     }
-    // Ram already present - just enable writes
-    __make_bios_writable_intel(bdf, pam0);
 }
 
 static void

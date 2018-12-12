@@ -60,13 +60,17 @@
 #define SEG_BDA      0x0040
 #define SEG_BIOS     0xf000
 
+// On the emulators, the bios at 0xf0000 is also at 0xffff0000
+#define BIOS_SRC_OFFSET 0xfff00000
+
 // Segment definitions in protected mode (see rombios32_gdt in misc.c)
-#define SEG32_MODE32_CS    (1 << 3)
-#define SEG32_MODE32_DS    (2 << 3)
-#define SEG32_MODE16_CS    (3 << 3)
-#define SEG32_MODE16_DS    (4 << 3)
-#define SEG32_MODE16BIG_CS (5 << 3)
-#define SEG32_MODE16BIG_DS (6 << 3)
+#define SEG32_MODE32_CS         (1 << 3)
+#define SEG32_MODE32_DS         (2 << 3)
+#define SEG32_MODE16_CS         (3 << 3)
+#define SEG32_MODE16_DS         (4 << 3)
+#define SEG32_MODE16BIG_CS      (5 << 3)
+#define SEG32_MODE16BIG_DS      (6 << 3)
+#define SEG32_MODE32_HIGH_CS    (7 << 3)
 
 // Debugging levels.  If non-zero and CONFIG_DEBUG_LEVEL is greater
 // than the specified value, then the corresponding irq handler will
