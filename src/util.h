@@ -38,6 +38,8 @@ struct usbdevice_s;
 int bootprio_find_usb(struct usbdevice_s *usbdev, int lun);
 int get_keystroke(int msec);
 
+#define SCANCODE_A 0x1e
+
 // bootsplash.c
 void enable_vga_console(void);
 void enable_bootsplash(void);
