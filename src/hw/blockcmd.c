@@ -222,15 +222,16 @@ int scsi_rep_luns_scan(struct drive_s *tmp_drive, scsi_add_lun add_lun)
     struct cdb_report_luns cdb = {
         .command = CDB_CMD_REPORT_LUNS,
     };
-    struct disk_op_s op = {
-        .drive_fl = tmp_drive,
-        .command = CMD_SCSI,
-        .count = 1,
-        .cdbcmd = &cdb,
-    };
+    /* GCC 4.4 (CentOS 6) can't initialise anonymous unions. */
+    struct disk_op_s op = {};
     struct cdbres_report_luns *resp;
 
     ASSERT32FLAT();
+
+    op.drive_fl = tmp_drive;
+    op.command = CMD_SCSI;
+    op.count = 1;
+    op.cdbcmd = &cdb;
 
     while (1) {
         op.blocksize = sizeof(struct cdbres_report_luns) +
