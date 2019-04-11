@@ -189,6 +189,7 @@ void handle_15c2(struct bregs *regs);
 void process_key(u8 key);
 u8 enqueue_key(u16 keycode);
 u16 ascii_to_keycode(u8 ascii);
+u16 ascii_to_scancode(u8 ascii);
 
 // misc.c
 extern int HaveRunPost;

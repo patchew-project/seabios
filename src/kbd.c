@@ -271,12 +271,12 @@ handle_16(struct bregs *regs)
 
 #define none 0
 
-static struct scaninfo {
+struct scaninfo {
     u16 normal;
     u16 shift;
     u16 control;
     u16 alt;
-} scan_to_keycode[] VAR16 = {
+} scan_to_keycode[] VARFSEG = {
     {   none,   none,   none,   none },
     { 0x011b, 0x011b, 0x011b, 0x01f0 }, /* escape */
     { 0x0231, 0x0221,   none, 0x7800 }, /* 1! */
@@ -386,6 +386,21 @@ u16 ascii_to_keycode(u8 ascii)
             return GET_GLOBAL(scan_to_keycode[i].shift);
         if ((GET_GLOBAL(scan_to_keycode[i].control) & 0xff) == ascii)
             return GET_GLOBAL(scan_to_keycode[i].control);
+    }
+    return 0;
+}
+
+u16 ascii_to_scancode(u8 ascii)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(scan_to_keycode); i++) {
+        if ((GET_GLOBAL(scan_to_keycode[i].normal) & 0xff) == ascii)
+            return i;
+        if ((GET_GLOBAL(scan_to_keycode[i].shift) & 0xff) == ascii)
+            return i;
+        if ((GET_GLOBAL(scan_to_keycode[i].control) & 0xff) == ascii)
+            return i;
     }
     return 0;
 }
