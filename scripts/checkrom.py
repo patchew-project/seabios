@@ -34,6 +34,31 @@ def check_windows_bios_date(rawdata):
         print("Warning!  No dates were detected in rom.")
         print("   This may cause Windows OS to report incorrect date.")
 
+def check_windows_bios_version(rawdata):
+    versions = []
+    for i in xrange(len(rawdata)):
+        if (rawdata[i+0].isdigit() and
+                rawdata[i+1] == '.' and
+                rawdata[i+2].isdigit()):
+            p = i-1
+            while ((p >= 0) and (p > i+2-127)
+                   and ord(rawdata[p]) >= ord(' ')
+                   and rawdata[p] != '$'):
+                p -= 1
+            version = rawdata[p+1:i+3]
+            for s in ["Ver", "Rev", "Rel",
+                      "v0", "v1", "v2", "v3", "v4",
+                      "v5", "v6", "v7", "v8", "v9",
+                      "v 0", "v 1", "v 2", "v 3", "v 4",
+                      "v 5", "v 6", "v 7", "v 8", "v 9"]:
+                if s in version:
+                    versions.append((rawdata[p+1:i+3], i))
+                    break
+    if len(versions) > 0:
+        print("Warning!  Version strings were detected in rom.")
+        print("   This may cause Windows OS to report incorrect version:")
+        print("   %s" % (versions, ))
+
 def main():
     # Get args
     objinfo, finalsize, rawfile, outfile = sys.argv[1:]
@@ -64,6 +89,7 @@ def main():
 
     # Sanity checks
     check_windows_bios_date(rawdata)
+    check_windows_bios_version(rawdata)
 
     start = symbols['code32flat_start'].offset
     end = symbols['code32flat_end'].offset
