@@ -85,6 +85,7 @@ void copy_smbios(void *pos);
 void display_uuid(void);
 void copy_table(void *pos);
 void smbios_setup(void);
+void smbios_update_bios_date(const char *release_date);
 
 // fw/coreboot.c
 extern const char *CBvendor, *CBpart;
