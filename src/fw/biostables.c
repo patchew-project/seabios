@@ -401,7 +401,6 @@ smbios_new_type_0(void *start,
 }
 
 #define BIOS_NAME "SeaBIOS"
-#define BIOS_DATE "04/01/2014"
 
 static int
 smbios_romfile_setup(void)

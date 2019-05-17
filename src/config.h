@@ -29,6 +29,17 @@
 #define BUILD_SUBMODEL_ID   0x00
 #define BUILD_BIOS_REVISION 0x01
 
+#define BIOS_DATE_MONTH         "04"
+#define BIOS_DATE_DAY           "01"
+#define BIOS_DATE_YEAR          "14"
+#define BIOS_DATE_YEAR_PREFIX   "20"
+#define BIOS_DATE           (BIOS_DATE_MONTH "/"    \
+                             BIOS_DATE_DAY   "/"    \
+                             BIOS_DATE_YEAR_PREFIX BIOS_DATE_YEAR)
+#define BIOS_DATE_SHORT     (BIOS_DATE_MONTH "/"    \
+                             BIOS_DATE_DAY   "/"    \
+                             BIOS_DATE_YEAR)
+
 // Various memory addresses used by the code.
 #define BUILD_STACK_ADDR          0x7000
 #define BUILD_S3RESUME_STACK_ADDR 0x1000
