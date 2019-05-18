@@ -17,6 +17,23 @@ def checksum(data, start, size, csum):
     sumbyte = buildrom.checksum(data[start:start+size])
     return subst(data, start+csum, sumbyte)
 
+def check_windows_bios_date(rawdata):
+    dates = []
+    for i in xrange(len(rawdata)):
+        if (rawdata[i+0:i+2].isdigit() and
+                rawdata[i+2] == '/' and
+                rawdata[i+3:i+5].isdigit() and
+                rawdata[i+5] == '/' and
+                rawdata[i+6:i+8].isdigit()):
+            dates.append(rawdata[i:i+8])
+    if len(dates) > 1:
+        print("Warning!  More than one date was detected in rom.")
+        print("   This may cause Windows OS to report incorrect date:")
+        print("   %s" % (dates, ))
+    if len(dates) == 0:
+        print("Warning!  No dates were detected in rom.")
+        print("   This may cause Windows OS to report incorrect date.")
+
 def main():
     # Get args
     objinfo, finalsize, rawfile, outfile = sys.argv[1:]
@@ -46,6 +63,8 @@ def main():
         sys.exit(1)
 
     # Sanity checks
+    check_windows_bios_date(rawdata)
+
     start = symbols['code32flat_start'].offset
     end = symbols['code32flat_end'].offset
     expend = layoutrom.BUILD_BIOS_ADDR + layoutrom.BUILD_BIOS_SIZE
