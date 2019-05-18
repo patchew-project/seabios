@@ -2,6 +2,7 @@
 #ifndef __UTIL_H
 #define __UTIL_H
 
+#include "config.h" // BIOS_DATE_SHORT
 #include "types.h" // u32
 
 // apm.c
@@ -243,6 +244,9 @@ void lpt_setup(void);
 
 // version.c
 extern const char VERSION[], BUILDINFO[];
+
+// misc.c
+extern char BiosDate[sizeof(BIOS_DATE_SHORT)] __aligned(1);
 
 // vgahooks.c
 void handle_155f(struct bregs *regs);

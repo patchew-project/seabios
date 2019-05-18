@@ -439,7 +439,7 @@ smbios_romfile_setup(void)
     if (need_t0) {
         /* common case: add our own type 0, with 3 strings and 4 '\0's */
         u16 t0_len = sizeof(struct smbios_type_0) + strlen(BIOS_NAME) +
-                     strlen(VERSION) + strlen(BIOS_DATE) + 4;
+                     strlen(VERSION) + sizeof(BIOS_DATE) + 3;
         ep.structure_table_length += t0_len;
         if (t0_len > ep.max_structure_size)
             ep.max_structure_size = t0_len;
@@ -459,8 +459,16 @@ smbios_romfile_setup(void)
     ep.structure_table_address = (u32)tables;
 
     /* populate final blob */
-    if (need_t0)
-        tables = smbios_new_type_0(tables, BIOS_NAME, VERSION, BIOS_DATE);
+    if (need_t0) {
+        char bios_date[sizeof(BIOS_DATE)];
+        memcpy(bios_date, BiosDate, sizeof("mm/dd/") - 1);
+        memcpy(bios_date + sizeof("mm/dd/") - 1, BIOS_DATE_YEAR_PREFIX,
+               sizeof("yy") - 1);
+        memcpy(bios_date + sizeof("mm/dd/yy") - 1,
+               BiosDate + sizeof("mm/dd/") - 1,
+               sizeof("yy"));
+        tables = smbios_new_type_0(tables, BIOS_NAME, VERSION, bios_date);
+    }
     memcpy(tables, qtables, qtables_len);
     free(qtables);
 
