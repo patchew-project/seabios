@@ -161,7 +161,6 @@ get_external(int type, char **p, unsigned *nr_structs,
     } while (0)
 
 /* Type 0 -- BIOS Information */
-#define RELEASE_DATE_STR "01/01/2011"
 static void *
 smbios_init_type_0(void *start)
 {
@@ -179,7 +178,7 @@ smbios_init_type_0(void *start)
 
     p->bios_starting_address_segment = 0xe800;
 
-    load_str_field_with_default(0, bios_release_date_str, RELEASE_DATE_STR);
+    load_str_field_with_default(0, bios_release_date_str, BIOS_DATE);
 
     p->bios_rom_size = 0; /* FIXME */
 
