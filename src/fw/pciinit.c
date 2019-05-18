@@ -328,7 +328,8 @@ static void intel_igd_setup(struct pci_device *dev, void *arg)
         pci_config_writel(bdf, 0x5C, cpu_to_le32((u32)addr));
 
         dprintf(1, "Intel IGD BDSM enabled at 0x%08x, size %lldMB, dev "
-                "00:02.0\n", (u32)addr, bdsm_size >> 20);
+                "%02x:%02x.%x\n", (u32)addr, bdsm_size >> 20,
+                0, 2, 0);
     }
 }
 
