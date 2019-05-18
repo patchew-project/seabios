@@ -268,6 +268,38 @@ smbios_next(struct smbios_entry_point *smbios, void *prev)
     return prev;
 }
 
+// Get string from the smbios table.
+void *
+smbios_get_str(struct smbios_entry_point *smbios, void *offset, u8 n)
+{
+    if (!smbios || !offset || n == 0)
+        return NULL;
+    void *start = (void*)smbios->structure_table_address;
+    void *end = start + smbios->structure_table_length;
+    void *prev = NULL;
+    struct smbios_structure_header *hdr = offset;
+
+    if (offset + sizeof(*hdr) > end)
+        return NULL;
+
+    offset += hdr->length;
+
+    while (n > 0) {
+        prev = offset;
+        while (*(u8*)offset) {
+            if (offset + 3 > end)
+                return NULL; /* not enough space for "\0\0" */
+            offset++;
+        }
+        if (prev == offset)
+            return NULL; /* reached end of table */
+        n--;
+        offset++;
+    }
+
+    return prev;
+}
+
 struct smbios_entry_point *SMBiosAddr;
 
 void
@@ -409,6 +441,7 @@ smbios_romfile_setup(void)
     struct romfile_s *f_tables = romfile_find("etc/smbios/smbios-tables");
     struct smbios_entry_point ep;
     struct smbios_type_0 *t0;
+    char *release_date;
     u16 qtables_len, need_t0 = 1;
     u8 *qtables, *tables;
 
@@ -432,6 +465,9 @@ smbios_romfile_setup(void)
     for (t0 = smbios_next(&ep, NULL); t0; t0 = smbios_next(&ep, t0))
         if (t0->header.type == 0) {
             need_t0 = 0;
+            /* Sync BIOS hardcoded date with the SMBIOS provided one */
+            release_date = smbios_get_str(&ep, t0, t0->bios_release_date_str);
+            smbios_update_bios_date(release_date);
             break;
         }
 

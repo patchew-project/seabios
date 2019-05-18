@@ -160,12 +160,26 @@ get_external(int type, char **p, unsigned *nr_structs,
         }                                                               \
     } while (0)
 
+void
+smbios_update_bios_date(const char *release_date)
+{
+    if (!release_date)
+        return;
+    if (strlen(release_date) == sizeof("mm/dd/yyyy") - 1) {
+        memcpy(BiosDate, release_date, sizeof("mm/dd/") - 1);
+        memcpy(BiosDate + sizeof("mm/dd/") - 1,
+               release_date + sizeof("mm/dd/yy") - 1,
+               sizeof("yy") - 1);
+    }
+}
+
 /* Type 0 -- BIOS Information */
 static void *
 smbios_init_type_0(void *start)
 {
     struct smbios_type_0 *p = (struct smbios_type_0 *)start;
     char *end = (char *)start + sizeof(struct smbios_type_0);
+    char *release_date;
     size_t size;
     int str_index = 0;
 
@@ -178,7 +192,11 @@ smbios_init_type_0(void *start)
 
     p->bios_starting_address_segment = 0xe800;
 
-    load_str_field_with_default(0, bios_release_date_str, BIOS_DATE);
+    /* Sync BIOS hardcoded date with the SMBIOS provided one */
+    release_date = end;
+    load_str_field_with_default(0, bios_release_date_str, BiosDate);
+    if (p->bios_release_date_str)
+        smbios_update_bios_date(release_date);
 
     p->bios_rom_size = 0; /* FIXME */
 
