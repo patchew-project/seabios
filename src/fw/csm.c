@@ -264,6 +264,13 @@ handle_csm_0006(struct bregs *regs)
     dprintf(3, "Legacy16GetTableAddress size %x align %x region %d\n",
         size, align, region);
 
+    // DX = Required address alignment. Bit mapped.
+    // First non-zero bit from the right is the alignment.*/
+    if (align)
+	    align = 1 << __ffs(align);
+    else
+	    align = 1;
+
     if (region & 2)
         chunk = _malloc(&ZoneLow, size, align);
     if (!chunk && (region & 1))
