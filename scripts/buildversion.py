@@ -113,7 +113,9 @@ def main():
 
     cleanbuild, toolstr = tool_versions(options.tools)
 
-    ver = git_version()
+    ver = os.getenv('SEABIOS_VERSION')
+    if not ver:
+        ver = git_version()
     cleanbuild = cleanbuild and 'dirty' not in ver
     if not ver:
         ver = file_version()
