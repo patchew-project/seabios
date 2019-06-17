@@ -95,6 +95,8 @@ static int BiosGeometryCount;
 static void
 loadBiosGeometry(void)
 {
+    if (!CONFIG_BIOS_GEOMETRY)
+        return;
     BiosGeometryCount = 0;
     int fsize;
     char *f = romfile_loadfile("bios-geometry", &fsize);
@@ -163,6 +165,8 @@ boot_lchs_find(const char *glob)
 
 int boot_lchs_find_pci_device(struct pci_device *pci, struct chs_s *chs)
 {
+    if (!CONFIG_BIOS_GEOMETRY)
+        return -1;
     char desc[256];
     build_pci_path(desc, sizeof(desc), "*", pci);
     BootDeviceLCHS *b = boot_lchs_find(desc);
@@ -177,6 +181,8 @@ int boot_lchs_find_pci_device(struct pci_device *pci, struct chs_s *chs)
 int boot_lchs_find_scsi_device(struct pci_device *pci, int target, int lun,
                                struct chs_s *chs)
 {
+    if (!CONFIG_BIOS_GEOMETRY)
+        return -1;
     if (!pci)
         // support only pci machine for now
         return -1;
@@ -196,6 +202,8 @@ int boot_lchs_find_scsi_device(struct pci_device *pci, int target, int lun,
 int boot_lchs_find_ata_device(struct pci_device *pci, int chanid, int slave,
                               struct chs_s *chs)
 {
+    if (!CONFIG_BIOS_GEOMETRY)
+        return -1;
     if (!pci)
         // support only pci machine for now
         return -1;
