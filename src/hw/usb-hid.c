@@ -8,6 +8,7 @@
 #include "config.h" // CONFIG_*
 #include "output.h" // dprintf
 #include "ps2port.h" // ATKBD_CMD_GETID
+#include <string.h> //memset
 #include "usb.h" // usb_ctrlrequest
 #include "usb-hid.h" // usb_keyboard_setup
 #include "util.h" // process_key
@@ -59,7 +60,7 @@ usb_kbd_setup(struct usbdevice_s *usbdev
         // XXX - this enables the first found keyboard (could be random)
         return -1;
 
-    if (epdesc->wMaxPacketSize != 8)
+    if (epdesc->wMaxPacketSize > 10)
         return -1;
 
     // Enable "boot" protocol.
@@ -163,11 +164,15 @@ static u16 ModifierToScanCode[] VAR16 = {
 
 #define RELEASEBIT 0x80
 
-// Format of USB keyboard event data
+// Format of USB keyboard event data.
+// Some keyboards use a 9/10 byte packet size,
+// so account for that here to prevent buffer
+// overflow. We'll ignore the 9th/10th bytes
+// as it's out of spec.
 struct keyevent {
     u8 modifiers;
     u8 reserved;
-    u8 keys[6];
+    u8 keys[8];
 };
 
 // Translate data from KeyToScanCode[] to calls to process_key().
@@ -253,7 +258,7 @@ handle_key(struct keyevent *data)
             break;
         int j;
         for (j=0;; j++) {
-            if (j>=ARRAY_SIZE(data->keys)) {
+            if (j>=ARRAY_SIZE(old.keys)) {
                 // Key released.
                 procscankey(key, RELEASEBIT, data->modifiers);
                 if (i+1 >= ARRAY_SIZE(old.keys) || !old.keys[i+1])
@@ -274,7 +279,7 @@ handle_key(struct keyevent *data)
     // Process new keys
     procmodkey(data->modifiers & ~old.modifiers, 0);
     old.modifiers = data->modifiers;
-    for (i=0; i<ARRAY_SIZE(data->keys); i++) {
+    for (i=0; i<ARRAY_SIZE(old.keys); i++) {
         u8 key = data->keys[i];
         if (!key)
             continue;
@@ -310,6 +315,8 @@ usb_check_key(void)
 
     for (;;) {
         struct keyevent data;
+        //zeroize struct as most keyboards won't fill it
+        memset(&data, 0, sizeof(data));
         int ret = usb_poll_intr(pipe, &data);
         if (ret)
             break;
