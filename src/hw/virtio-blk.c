@@ -15,6 +15,7 @@
 #include "pcidevice.h" // foreachpci
 #include "pci_ids.h" // PCI_DEVICE_ID_VIRTIO_BLK
 #include "pci_regs.h" // PCI_VENDOR_ID
+#include "romfile.h" // romfile_find
 #include "stacks.h" // run_thread
 #include "std/disk.h" // DISK_RET_SUCCESS
 #include "string.h" // memset
@@ -196,6 +197,8 @@ fail:
 void
 virtio_blk_setup(void)
 {
+    u8 skip_nonbootable = romfile_find("etc/skip-non-bootable-virtio") != NULL;
+
     ASSERT32FLAT();
     if (! CONFIG_VIRTIO_BLK)
         return;
@@ -208,6 +211,13 @@ virtio_blk_setup(void)
             (pci->device != PCI_DEVICE_ID_VIRTIO_BLK_09 &&
              pci->device != PCI_DEVICE_ID_VIRTIO_BLK_10))
             continue;
+
+        if (skip_nonbootable && bootprio_find_pci_device(pci) == -1) {
+            dprintf(1, "skipping init of a non-bootable virtio-blk at %pP\n",
+                    pci);
+            continue;
+        }
+
         run_thread(init_virtio_blk, pci);
     }
 }
