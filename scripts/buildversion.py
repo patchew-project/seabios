@@ -113,17 +113,22 @@ def main():
 
     cleanbuild, toolstr = tool_versions(options.tools)
 
-    ver = git_version()
-    cleanbuild = cleanbuild and 'dirty' not in ver
-    if not ver:
-        ver = file_version()
+    # If there are correct .version file, use it.
+    # Othervise look for version in git.
+    ver = file_version()
+    if ver:
         # We expect the "extra version" to contain information on the
-        # distributor and distribution package version (if
-        # applicable).  It is a "clean" build if this is a build from
+        # distributor and distribution package version (if applicable).
+        # It is a "clean" build if this is a build from
         # an official release tarball and the above info is present.
         cleanbuild = cleanbuild and ver and options.extra != ""
-        if not ver:
+    else:
+        ver = git_version()
+        if ver:
+            cleanbuild = cleanbuild and 'dirty' not in ver
+        else:
             ver = "?"
+
     if not cleanbuild:
         btime = time.strftime("%Y%m%d_%H%M%S")
         hostname = socket.gethostname()
