@@ -15,6 +15,7 @@
 #include "hw/pcidevice.h" // pci_probe_devices
 #include "hw/pci_regs.h" // PCI_DEVICE_ID
 #include "hw/serialio.h" // PORT_SERIAL1
+#include "hw/virtio-mmio.h" // virtio_mmio_register
 #include "hw/rtc.h" // CMOS_*
 #include "malloc.h" // malloc_tmp
 #include "output.h" // dprintf
@@ -192,6 +193,27 @@ static void msr_feature_control_setup(void)
         wrmsr_smp(MSR_IA32_FEATURE_CONTROL, feature_control_bits);
 }
 
+static void qemu_probe_virtio_mmio(void)
+{
+    char *data, *next;
+    int size;
+    u64 mmio;
+
+    data = romfile_loadfile("bootorder", &size);
+    while (data) {
+        next = strchr(data, '\n');
+        if (next) {
+            *next = '\0';
+            next++;
+        }
+        if (memcmp("/virtio-mmio@", data, 13) == 0) {
+            mmio = strtol(data+13, 16);
+            virtio_mmio_register(mmio);
+        }
+        data = next;
+    }
+}
+
 void
 qemu_platform_setup(void)
 {
@@ -216,6 +238,8 @@ qemu_platform_setup(void)
     mtrr_setup();
     msr_feature_control_setup();
     smp_setup();
+
+    qemu_probe_virtio_mmio();
 
     // Create bios tables
     if (MaxCountCPUs <= 255) {
