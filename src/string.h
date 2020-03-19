@@ -27,5 +27,6 @@ void *memmove(void *d, const void *s, size_t len);
 char *strtcpy(char *dest, const char *src, size_t len);
 char *strchr(const char *s, int c);
 char *nullTrailingSpace(char *buf);
+u64 strtol(const char *ptr, int base);
 
 #endif // string.h

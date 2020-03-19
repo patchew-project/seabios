@@ -249,3 +249,28 @@ nullTrailingSpace(char *buf)
         buf++;
     return buf;
 }
+
+u64 strtol(const char *ptr, int base)
+{
+    u64 digit, val = 0;
+
+    for (;;) {
+        switch (*ptr) {
+        case '0' ... '9':
+            digit = *ptr - '0';
+            break;
+        case 'a' ... 'f':
+            digit = *ptr - 'a' + 10;
+            break;
+        case 'A' ... 'F':
+            digit = *ptr - 'A' + 10;
+            break;
+        default:
+            return val;
+        }
+        if (digit >= base)
+            return val;
+        val = val * base + digit;
+        ptr++;
+    }
+}
