@@ -149,6 +149,8 @@ platform_hardware_setup(void)
     qemu_platform_setup();
     coreboot_platform_setup();
 
+    acpi_dsdt_parse();
+
     // Setup timers and periodic clock interrupt
     timer_setup();
     clock_setup();
