@@ -17,6 +17,7 @@
 #include "hw/rtc.h" // rtc_write
 #include "hw/serialio.h" // serial_debug_preinit
 #include "hw/usb.h" // usb_setup
+#include "hw/virtio-mmio.h" // virtio_mmio_acpi
 #include "malloc.h" // malloc_init
 #include "memmap.h" // SYMBOL
 #include "output.h" // dprintf
@@ -150,6 +151,7 @@ platform_hardware_setup(void)
     coreboot_platform_setup();
 
     acpi_dsdt_parse();
+    virtio_mmio_acpi();
 
     // Setup timers and periodic clock interrupt
     timer_setup();

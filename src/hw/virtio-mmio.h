@@ -71,6 +71,7 @@ typedef struct virtio_mmio_cfg {
 } virtio_mmio_cfg;
 
 void virtio_mmio_register(u64 mmio);
+void virtio_mmio_acpi(void);
 void virtio_mmio_setup(void);
 void vp_init_mmio(struct vp_device *vp, void *mmio);
 

@@ -100,6 +100,7 @@ struct acpi_device *acpi_dsdt_find_string(struct acpi_device *prev, const char *
 struct acpi_device *acpi_dsdt_find_eisaid(struct acpi_device *prev, u16 eisaid);
 char *acpi_dsdt_name(struct acpi_device *dev);
 int acpi_dsdt_present_eisaid(u16 eisaid);
+void acpi_dsdt_virtio(void);
 int acpi_dsdt_find_io(struct acpi_device *dev, u64 *min, u64 *max);
 int acpi_dsdt_find_mem(struct acpi_device *dev, u64 *min, u64 *max);
 int acpi_dsdt_find_irq(struct acpi_device *dev, u64 *irq);
