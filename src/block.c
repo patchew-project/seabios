@@ -20,6 +20,7 @@
 #include "hw/usb-uas.h" // uas_process_op
 #include "hw/virtio-blk.h" // process_virtio_blk_op
 #include "hw/virtio-scsi.h" // virtio_scsi_process_op
+#include "hw/virtio-mmio.h" // virtio_mmio_setup
 #include "hw/nvme.h" // nvme_process_op
 #include "malloc.h" // malloc_low
 #include "output.h" // dprintf
@@ -514,6 +515,7 @@ block_setup(void)
     ramdisk_setup();
     virtio_blk_setup();
     virtio_scsi_setup();
+    virtio_mmio_setup();
     lsi_scsi_setup();
     esp_scsi_setup();
     megasas_setup();
