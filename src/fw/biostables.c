@@ -6,6 +6,14 @@
 
 #include "byteorder.h" // le32_to_cpu
 #include "config.h" // CONFIG_*
+// Support for manipulating bios tables (pir, mptable, acpi, smbios).
+//
+// Copyright (C) 2008,2009  Kevin O'Connor <kevin@koconnor.net>
+//
+// This file may be distributed under the terms of the GNU LGPLv3 license.
+
+#include "byteorder.h" // le32_to_cpu
+#include "config.h" // CONFIG_*
 #include "hw/pci.h" // pci_config_writeb
 #include "malloc.h" // malloc_fseg
 #include "memmap.h" // SYMBOL
@@ -256,6 +264,7 @@ find_acpi_features(void)
         void *p = fadt;
         acpi_set_reset_reg(p + 116, *(u8 *)(p + 128));
     }
+    acpi_dsdt_parse();
 }
 
 
