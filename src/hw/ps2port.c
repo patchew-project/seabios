@@ -58,6 +58,12 @@ static int
 i8042_flush(void)
 {
     dprintf(7, "i8042_flush\n");
+
+    /* Disable the keyboard and mouse to prevent additional data from
+     * being queued. */
+    outb(0xad, PORT_PS2_STATUS);
+    outb(0xa7, PORT_PS2_STATUS);
+
     int i;
     for (i=0; i<I8042_BUFFER_SIZE; i++) {
         u8 status = inb(PORT_PS2_STATUS);
