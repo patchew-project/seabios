@@ -106,6 +106,10 @@ u16 DebugOutputPort VARFSEG = 0x402;
 void
 qemu_debug_preinit(void)
 {
+    /* Xen already overrode DebugOutputPort in xen_preinit(). */
+    if (runningOnXen())
+        return;
+
     /* Check if the QEMU debug output port is active */
     if (CONFIG_DEBUG_IO &&
         inb(GET_GLOBAL(DebugOutputPort)) != QEMU_DEBUGCON_READBACK)
