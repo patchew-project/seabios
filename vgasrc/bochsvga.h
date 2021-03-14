@@ -6,8 +6,8 @@
 #define VBE_DISPI_BANK_ADDRESS           0xA0000
 #define VBE_DISPI_BANK_SIZE_KB           64
 
-#define VBE_DISPI_MAX_XRES               2560
-#define VBE_DISPI_MAX_YRES               1600
+#define VBE_DISPI_MAX_XRES               3840
+#define VBE_DISPI_MAX_YRES               2160
 
 #define VBE_DISPI_IOPORT_INDEX           0x01CE
 #define VBE_DISPI_IOPORT_DATA            0x01CF
