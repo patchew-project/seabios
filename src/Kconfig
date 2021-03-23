@@ -72,6 +72,16 @@ endchoice
         help
             Support controlling of the boot order via the fw_cfg/CBFS
             "bootorder" file.
+    config BOOT_FAST_INIT
+        depends on BOOTORDER
+        bool "Fast boot device init"
+        default y
+        help
+            Skip initialization for devices without bootindex.  Speeds
+            up boot and reduced memory footprint, but may cause boot
+            problems in case the bootloader needs access to secondary
+            disks.
+
     config HOST_BIOS_GEOMETRY
         depends on BOOT
         bool "Boot device bios geometry override"
