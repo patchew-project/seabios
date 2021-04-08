@@ -299,6 +299,8 @@ u8 is_bootprio_strict(void)
 {
     static int prio_halt = -2;
 
+    if (!CONFIG_BOOT_FAST_INIT)
+        return 0;
     if (prio_halt == -2)
         prio_halt = find_prio("HALT");
     return prio_halt >= 0;
