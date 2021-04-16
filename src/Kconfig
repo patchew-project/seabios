@@ -140,6 +140,13 @@ endchoice
             it into 128 KB (which was big enouth for a long time) you'll
             probably have to disable some featues such as xhci support.
 
+    config MIN_BIOSTABLE
+        int "biostable size (in KB)"
+        default 8 if ROM_SIZE >= 256
+        default 2
+        help
+            Memory space for BIOS tables in f-segment.
+
 endmenu
 
 menu "Hardware support"
