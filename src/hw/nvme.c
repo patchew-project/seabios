@@ -233,10 +233,23 @@ nvme_admin_identify_ns(struct nvme_ctrl *ctrl, u32 ns_id)
                                 ns_id)->ns;
 }
 
-static void
+static char*
+nvme_ns_desc(const struct nvme_namespace *ns, u32 ns_id)
+{
+    return znprintf(MAXDESCSIZE, "NVMe NS %u: %llu MiB (%llu %u-byte "
+                                 "blocks + %u-byte metadata)\n",
+                                  ns_id, (ns->lba_count * ns->block_size) >> 20,
+                                  ns->lba_count, ns->block_size,
+                                  ns->metadata_size);
+}
+
+/* Returns 0 if the namespace is usable, -1 otherwise. */
+static int
 nvme_probe_ns(struct nvme_ctrl *ctrl, struct nvme_namespace *ns, u32 ns_id,
               u8 mdts)
 {
+    int ret = -1;
+
     ns->ctrl  = ctrl;
     ns->ns_id = ns_id;
 
@@ -288,16 +301,14 @@ nvme_probe_ns(struct nvme_ctrl *ctrl, struct nvme_namespace *ns, u32 ns_id,
 
     ns->dma_buffer = zalloc_page_aligned(&ZoneHigh, NVME_PAGE_SIZE);
 
-    char *desc = znprintf(MAXDESCSIZE, "NVMe NS %u: %llu MiB (%llu %u-byte "
-                          "blocks + %u-byte metadata)\n",
-                          ns_id, (ns->lba_count * ns->block_size) >> 20,
-                          ns->lba_count, ns->block_size, ns->metadata_size);
-
+    char *desc = nvme_ns_desc(ns, ns_id);
     dprintf(3, "%s", desc);
-    boot_add_hd(&ns->drive, desc, bootprio_find_pci_device(ctrl->pci));
+    free(desc);
+    ret = 0;
 
 free_buffer:
     free (id);
+    return ret;
 }
 
 
@@ -635,10 +646,28 @@ nvme_controller_enable(struct nvme_ctrl *ctrl)
     memset(ctrl->ns, 0, sizeof(*ctrl->ns) * ctrl->ns_count);
 
     /* Populate namespace IDs */
-    int ns_idx;
-    for (ns_idx = 0; ns_idx < ctrl->ns_count; ns_idx++) {
-        nvme_probe_ns(ctrl, &ctrl->ns[ns_idx], ns_idx + 1, identify->mdts);
+    int ns_idx, first_ns_idx = -1, prio = -1;
+    for (ns_idx = 0; ns_idx < ctrl->ns_count && prio == -1; ns_idx++) {
+        if (!nvme_probe_ns(ctrl, &ctrl->ns[ns_idx], ns_idx + 1, identify->mdts)) {
+            /* Check whether the NS is explicitly specified. */
+            if (first_ns_idx == -1) {
+                first_ns_idx = ns_idx;
+            }
+            prio = bootprio_find_nvme_device(ctrl->pci, ns_idx + 1);
+        }
     }
+     /* no NS specified, use the first one */
+    if (prio != -1) {
+        ns_idx--;
+    } else if (first_ns_idx != -1) {
+        ns_idx = first_ns_idx;
+        dprintf(3, "no NVMe NS specified, defaulting to NS %u\n", ns_idx + 1);
+        prio = bootprio_find_pci_device(ctrl->pci);
+    }
+    if (prio != -1) {
+        boot_add_hd(&ctrl->ns[ns_idx].drive,
+                    nvme_ns_desc(&ctrl->ns[ns_idx], ns_idx + 1), prio);
+   }
 
     dprintf(3, "NVMe initialization complete!\n");
     return 0;

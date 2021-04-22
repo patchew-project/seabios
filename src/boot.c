@@ -325,6 +325,18 @@ int bootprio_find_mmio_device(void *mmio)
     return find_prio(desc);
 }
 
+int bootprio_find_nvme_device(struct pci_device *pci, u32 ns_id)
+{
+    if (CONFIG_CSM)
+        return csm_bootprio_pci(pci);
+    if (!CONFIG_BOOTORDER)
+        return -1;
+    char desc[256], *p;
+    p = build_pci_path(desc, sizeof(desc), "*", pci);
+    snprintf(p, desc+sizeof(desc)-p, "/nvme/ns@%u", ns_id);
+    return find_prio(desc);
+}
+
 int bootprio_find_scsi_device(struct pci_device *pci, int target, int lun)
 {
     if (!CONFIG_BOOTORDER)
