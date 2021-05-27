@@ -636,7 +636,8 @@ def scanconfig(file):
 
 def main():
     # Get output name
-    in16, in32seg, in32flat, cfgfile, out16, out32seg, out32flat = sys.argv[1:]
+    in16, in32seg, in32flat, cfgfile, out16, out32seg, out32flat, biostable = sys.argv[1:]
+    BUILD_MIN_BIOSTABLE = biostable * 1024
 
     # Read in the objdump information
     infile16 = open(in16, 'r')
