@@ -107,7 +107,7 @@ call32_post(void)
     // Restore cmos index register
     u8 cmosindex = GET_LOW(Call16Data.cmosindex);
     if (!(cmosindex & NMI_DISABLE_BIT)) {
-        outb(cmosindex, PORT_CMOS_INDEX);
+        outb(cmosindex | NMI_DISABLE_BIT, PORT_CMOS_INDEX);
         inb(PORT_CMOS_DATA);
     }
     return method;
