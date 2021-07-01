@@ -233,9 +233,22 @@ nvme_admin_identify_ns(struct nvme_ctrl *ctrl, u32 ns_id)
                                 ns_id)->ns;
 }
 
-static void
+static char*
+nvme_ns_desc(const struct nvme_namespace *ns, u32 ns_id)
+{
+    return znprintf(MAXDESCSIZE, "NVMe NS %u: %llu MiB (%llu %u-byte "
+                                 "blocks + %u-byte metadata)\n",
+                                  ns_id, (ns->lba_count * ns->block_size) >> 20,
+                                  ns->lba_count, ns->block_size,
+                                  ns->metadata_size);
+}
+
+/* Returns a pointer to the namespace if it's usable, NULL otherwise. */
+struct nvme_namespace*
 nvme_probe_ns(struct nvme_ctrl *ctrl, u32 ns_idx, u8 mdts)
 {
+    struct nvme_namespace *ns = NULL;
+
     u32 ns_id = ns_idx + 1;
 
     struct nvme_identify_ns *id = nvme_admin_identify_ns(ctrl, ns_id);
@@ -257,7 +270,7 @@ nvme_probe_ns(struct nvme_ctrl *ctrl, u32 ns_idx, u8 mdts)
         goto free_buffer;
     }
 
-    struct nvme_namespace *ns = malloc_fseg(sizeof(*ns));
+    ns = malloc_fseg(sizeof(*ns));
     if (!ns) {
         warn_noalloc();
         goto free_buffer;
@@ -277,6 +290,7 @@ nvme_probe_ns(struct nvme_ctrl *ctrl, u32 ns_idx, u8 mdts)
            buffer size. */
         warn_internalerror();
         free(ns);
+        ns = NULL;
         goto free_buffer;
     }
 
@@ -296,16 +310,13 @@ nvme_probe_ns(struct nvme_ctrl *ctrl, u32 ns_idx, u8 mdts)
 
     ns->dma_buffer = zalloc_page_aligned(&ZoneHigh, NVME_PAGE_SIZE);
 
-    char *desc = znprintf(MAXDESCSIZE, "NVMe NS %u: %llu MiB (%llu %u-byte "
-                          "blocks + %u-byte metadata)",
-                          ns_id, (ns->lba_count * ns->block_size) >> 20,
-                          ns->lba_count, ns->block_size, ns->metadata_size);
-
-    dprintf(3, "%s\n", desc);
-    boot_add_hd(&ns->drive, desc, bootprio_find_pci_device(ctrl->pci));
+    char *desc = nvme_ns_desc(ns, ns_id);
+    dprintf(3, "%s", desc);
+    free(desc);
 
 free_buffer:
     free (id);
+    return ns;
 }
 
 
@@ -560,6 +571,13 @@ nvme_wait_csts_rdy(struct nvme_ctrl *ctrl, unsigned rdy)
     return 0;
 }
 
+static void
+nvme_destroy_io_queues(struct nvme_ctrl *ctrl)
+{
+    nvme_destroy_sq(&ctrl->io_sq);
+    nvme_destroy_cq(&ctrl->io_cq);
+}
+
 /* Returns 0 on success. */
 static int
 nvme_controller_enable(struct nvme_ctrl *ctrl)
@@ -628,15 +646,24 @@ nvme_controller_enable(struct nvme_ctrl *ctrl)
         goto err_destroy_admin_sq;
     }
 
-    /* Populate namespace IDs */
+    /* Find first active namespace. */
     int ns_idx;
-    for (ns_idx = 0; ns_idx < ctrl->ns_count; ns_idx++) {
-        nvme_probe_ns(ctrl, ns_idx, identify->mdts);
+    struct nvme_namespace *ns = NULL;
+    for (ns_idx = 0; ns_idx < ctrl->ns_count && !ns; ns_idx++) {
+        ns = nvme_probe_ns(ctrl, ns_idx, identify->mdts);
     }
+    if (!ns) {
+        dprintf(3, "no active NVMe namespace\n");
+        goto err_destroy_ioq;
+    }
+    boot_add_hd(&ns->drive, nvme_ns_desc(ns, ns_idx + 1),
+                bootprio_find_pci_device(ctrl->pci));
 
     dprintf(3, "NVMe initialization complete!\n");
     return 0;
 
+ err_destroy_ioq:
+    nvme_destroy_io_queues(ctrl);
  err_destroy_admin_sq:
     nvme_destroy_sq(&ctrl->admin_sq);
  err_destroy_admin_cq:
