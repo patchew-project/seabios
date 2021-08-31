@@ -203,8 +203,18 @@ init_virtio_scsi(void *data)
         }
     }
 
+    if (vp_find_vq(vp, 0, &vq) < 0 ) {
+        dprintf(1, "fail to find ctrl vq for virtio-scsi %pP\n", pci);
+        goto fail;
+    }
+
+    if (vp_find_vq(vp, 1, &vq) < 0 ) {
+        dprintf(1, "fail to find event vq for virtio-scsi %pP\n", pci);
+        goto fail;
+    }
+
     if (vp_find_vq(vp, 2, &vq) < 0 ) {
-        dprintf(1, "fail to find vq for virtio-scsi %pP\n", pci);
+        dprintf(1, "fail to find req vq for virtio-scsi %pP\n", pci);
         goto fail;
     }
 
