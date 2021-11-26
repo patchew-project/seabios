@@ -121,12 +121,16 @@ init_virtio_blk(void *data)
         u64 version1 = 1ull << VIRTIO_F_VERSION_1;
         u64 iommu_platform = 1ull << VIRTIO_F_IOMMU_PLATFORM;
         u64 blk_size = 1ull << VIRTIO_BLK_F_BLK_SIZE;
+        u64 max_segments = 1ull << VIRTIO_BLK_F_SEG_MAX;
+        u64 max_segment_size = 1ull << VIRTIO_BLK_F_SIZE_MAX;
+
         if (!(features & version1)) {
             dprintf(1, "modern device without virtio_1 feature bit: %pP\n", pci);
             goto fail;
         }
 
-        features = features & (version1 | iommu_platform | blk_size);
+        features = features & (version1 | iommu_platform | blk_size
+                        | max_segments | max_segment_size);
         vp_set_features(vp, features);
         status |= VIRTIO_CONFIG_S_FEATURES_OK;
         vp_set_status(vp, status);
@@ -134,6 +138,22 @@ init_virtio_blk(void *data)
             dprintf(1, "device didn't accept features: %pP\n", pci);
             goto fail;
         }
+
+        if (features & max_segment_size)
+            vdrive->drive.max_segment_size =
+                vp_read(&vp->device, struct virtio_blk_config, size_max);
+        else
+            vdrive->drive.max_segment_size = 0;
+        dprintf(3, "virtio-blk %pP size_max=%u.\n", pci,
+                vdrive->drive.max_segment_size);
+
+        if (features & max_segments)
+            vdrive->drive.max_segments =
+                vp_read(&vp->device, struct virtio_blk_config, seg_max);
+        else
+            vdrive->drive.max_segments = 0;
+        dprintf(3, "virtio-blk %pP seg_max=%u.\n", pci,
+                vdrive->drive.max_segments);
 
         vdrive->drive.sectors =
             vp_read(&vp->device, struct virtio_blk_config, capacity);
@@ -177,6 +197,21 @@ init_virtio_blk(void *data)
         vdrive->drive.pchs.cylinder = cfg.cylinders;
         vdrive->drive.pchs.head = cfg.heads;
         vdrive->drive.pchs.sector = cfg.sectors;
+
+        if (f & (1 << VIRTIO_BLK_F_SIZE_MAX))
+            vdrive->drive.max_segment_size = cfg.size_max;
+        else
+            vdrive->drive.max_segment_size = 0;
+        dprintf(3, "virtio-blk %pP size_max=%u.\n", pci,
+                vdrive->drive.max_segment_size);
+
+        if (f & (1 << VIRTIO_BLK_F_SEG_MAX))
+            vdrive->drive.max_segments = cfg.seg_max;
+        else
+            vdrive->drive.max_segments = 0;
+        dprintf(3, "virtio-blk %pP seg_max=%u.\n", pci,
+                vdrive->drive.max_segments);
+
     }
 
     char *desc = znprintf(MAXDESCSIZE, "Virtio disk PCI:%pP", pci);
@@ -218,8 +253,11 @@ init_virtio_blk_mmio(void *mmio)
     u64 features = vp_get_features(vp);
     u64 version1 = 1ull << VIRTIO_F_VERSION_1;
     u64 blk_size = 1ull << VIRTIO_BLK_F_BLK_SIZE;
+    u64 max_segments = 1ull << VIRTIO_BLK_F_SEG_MAX;
+    u64 max_segment_size = 1ull << VIRTIO_BLK_F_SIZE_MAX;
 
-    features = features & (version1 | blk_size);
+    features = features & (version1 | blk_size
+            | max_segments | max_segment_size);
     vp_set_features(vp, features);
     status |= VIRTIO_CONFIG_S_FEATURES_OK;
     vp_set_status(vp, status);
@@ -227,6 +265,20 @@ init_virtio_blk_mmio(void *mmio)
         dprintf(1, "device didn't accept features: %p\n", mmio);
         goto fail;
     }
+
+    if (features & max_segment_size)
+        vdrive->drive.max_segment_size =
+            vp_read(&vp->device, struct virtio_blk_config, size_max);
+    else
+        vdrive->drive.max_segment_size = 0;
+    dprintf(3, "virtio-blk size_max=%u.\n", vdrive->drive.max_segment_size);
+
+    if (features & max_segments)
+        vdrive->drive.max_segments =
+            vp_read(&vp->device, struct virtio_blk_config, seg_max);
+    else
+        vdrive->drive.max_segments = 0;
+    dprintf(3, "virtio-blk seg_max=%u.\n", vdrive->drive.max_segments);
 
     vdrive->drive.sectors =
         vp_read(&vp->device, struct virtio_blk_config, capacity);
