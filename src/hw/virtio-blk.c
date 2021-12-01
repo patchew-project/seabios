@@ -30,6 +30,44 @@ struct virtiodrive_s {
     struct vp_device vp;
 };
 
+#define BLK_NUM_MAX    8
+
+void dump(unsigned char *buf, int len)
+{
+	int i;
+	for (i = 0; i < len;) {
+		printf(" %2x", 0xff & buf[i++]);
+		if (i % 32 == 0)
+			printf("\n");
+	}
+	printf("\n");
+}
+
+void
+segment(struct virtiodrive_s *vdrive, int write, struct vring_list sg[])
+{
+	struct vring_virtqueue *vq = vdrive->vq;
+	
+	/* Add to virtqueue and kick host */
+	if (write)
+		vring_add_buf(vq, sg, 2, 1, 0, 0);
+	else
+		vring_add_buf(vq, sg, 1, 2, 0, 0);
+	vring_kick(&vdrive->vp, vq, 1);
+	
+	/* Wait for reply */
+	while (!vring_more_used(vq))
+		usleep(5);
+	
+	/* Reclaim virtqueue element */
+	vring_get_buf(vq, NULL);
+	
+	/* Clear interrupt status register.  Avoid leaving interrupts stuck if
+	 * VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
+	 */
+	vp_get_isr(&vdrive->vp);
+}
+
 static int
 virtio_blk_op(struct disk_op_s *op, int write)
 {
@@ -57,6 +95,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
         },
     };
 
+    if (op->count <= BLK_NUM_MAX) {/* added by andy */
     /* Add to virtqueue and kick host */
     if (write)
         vring_add_buf(vq, sg, 2, 1, 0, 0);
@@ -75,7 +114,37 @@ virtio_blk_op(struct disk_op_s *op, int write)
      * VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
      */
     vp_get_isr(&vdrive->vp);
+    } else {/* added by Andy */
+	struct vring_list *p_sg = &sg[1];
+	void *p  = op->buf_fl;
+	u16 count = op->count;
 
+	while (count > BLK_NUM_MAX) {
+		p_sg->addr = p;
+		p_sg->length = vdrive->drive.blksize * BLK_NUM_MAX;
+		segment(vdrive, write, sg);
+		//dump(p, p_sg->length);
+		if (status == VIRTIO_BLK_S_OK) {
+			hdr.sector += BLK_NUM_MAX;
+			p += p_sg->length;
+			count -= BLK_NUM_MAX;
+		} else {
+			break;
+		}
+	}
+
+	if (status != VIRTIO_BLK_S_OK) {
+		return DISK_RET_EBADTRACK;
+	}
+
+	if(count > 0) {
+		p_sg->addr = p;
+		p_sg->length = vdrive->drive.blksize * count;
+		segment(vdrive, write, sg);
+		//dump(p, p_sg->length);
+	}
+
+    }/* end of modification from Andy */
     return status == VIRTIO_BLK_S_OK ? DISK_RET_SUCCESS : DISK_RET_EBADTRACK;
 }
 
