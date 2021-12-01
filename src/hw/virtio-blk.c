@@ -30,6 +30,33 @@ struct virtiodrive_s {
     struct vp_device vp;
 };
 
+void
+virtio_blk_op_one_segment(struct virtiodrive_s *vdrive,
+    int write, struct vring_list sg[])
+{
+    struct vring_virtqueue *vq = vdrive->vq;
+
+    /* Add to virtqueue and kick host */
+    if (write)
+        vring_add_buf(vq, sg, 2, 1, 0, 0);
+    else
+        vring_add_buf(vq, sg, 1, 2, 0, 0);
+    vring_kick(&vdrive->vp, vq, 1);
+
+    /* Wait for reply */
+    while (!vring_more_used(vq))
+        usleep(5);
+
+    /* Reclaim virtqueue element */
+        vring_get_buf(vq, NULL);
+
+    /**
+    ** Clear interrupt status register. Avoid leaving interrupts stuck
+    ** if VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
+    **/
+    vp_get_isr(&vdrive->vp);
+}
+
 static int
 virtio_blk_op(struct disk_op_s *op, int write)
 {
@@ -56,26 +83,63 @@ virtio_blk_op(struct disk_op_s *op, int write)
             .length     = sizeof(status),
         },
     };
+    u32 max_io_size =
+        vdrive->drive.max_segment_size * vdrive->drive.max_segments;
+    u16 blk_num_max;
 
-    /* Add to virtqueue and kick host */
-    if (write)
-        vring_add_buf(vq, sg, 2, 1, 0, 0);
+    if (vdrive->drive.blksize != 0 && max_io_size != 0)
+        blk_num_max = (u16)max_io_size / vdrive->drive.blksize;
     else
-        vring_add_buf(vq, sg, 1, 2, 0, 0);
-    vring_kick(&vdrive->vp, vq, 1);
+        /* default blk_num_max if hardware doesnot advise a proper value */
+        blk_num_max = 8;
 
-    /* Wait for reply */
-    while (!vring_more_used(vq))
-        usleep(5);
+    if (op->count <= blk_num_max) {
+        /* Add to virtqueue and kick host */
+        if (write)
+            vring_add_buf(vq, sg, 2, 1, 0, 0);
+        else
+            vring_add_buf(vq, sg, 1, 2, 0, 0);
+        vring_kick(&vdrive->vp, vq, 1);
 
-    /* Reclaim virtqueue element */
-    vring_get_buf(vq, NULL);
+        /* Wait for reply */
+        while (!vring_more_used(vq))
+            usleep(5);
 
-    /* Clear interrupt status register.  Avoid leaving interrupts stuck if
-     * VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
-     */
-    vp_get_isr(&vdrive->vp);
+        /* Reclaim virtqueue element */
+        vring_get_buf(vq, NULL);
 
+        /* Clear interrupt status register.  Avoid leaving interrupts stuck if
+         * VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
+        */
+        vp_get_isr(&vdrive->vp);
+    } else {
+        struct vring_list *p_sg = &sg[1];
+        void *p  = op->buf_fl;
+        u16 count = op->count;
+
+        while (count > blk_num_max) {
+            p_sg->addr = p;
+            p_sg->length = vdrive->drive.blksize * blk_num_max;
+            virtio_blk_op_one_segment(vdrive, write, sg);
+            if (status == VIRTIO_BLK_S_OK) {
+                hdr.sector += blk_num_max;
+                p += p_sg->length;
+                count -= blk_num_max;
+            } else {
+                break;
+            }
+        }
+
+        if (status != VIRTIO_BLK_S_OK)
+            return DISK_RET_EBADTRACK;
+
+        if (count > 0) {
+            p_sg->addr = p;
+            p_sg->length = vdrive->drive.blksize * count;
+            virtio_blk_op_one_segment(vdrive, write, sg);
+        }
+
+    }
     return status == VIRTIO_BLK_S_OK ? DISK_RET_SUCCESS : DISK_RET_EBADTRACK;
 }
 
