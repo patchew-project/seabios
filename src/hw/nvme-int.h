@@ -108,6 +108,13 @@ struct nvme_ctrl {
     struct nvme_cq io_cq;
 };
 
+/* Page List Maintenance Data */
+struct nvme_prp_info {
+    u32 prpl_len;
+    void *prp1;
+    u64 prpl[NVME_MAX_PRPL_ENTRIES];
+};
+
 struct nvme_namespace {
     struct drive_s drive;
     struct nvme_ctrl *ctrl;
@@ -123,10 +130,7 @@ struct nvme_namespace {
     /* Page aligned buffer of size NVME_PAGE_SIZE. */
     char *dma_buffer;
 
-    /* Page List */
-    u32 prpl_len;
-    void *prp1;
-    u64 prpl[NVME_MAX_PRPL_ENTRIES];
+    struct nvme_prp_info *prp;
 };
 
 /* Data structures for NVMe admin identify commands */

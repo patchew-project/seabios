@@ -267,6 +267,14 @@ nvme_probe_ns(struct nvme_ctrl *ctrl, u32 ns_idx, u8 mdts)
     ns->ns_id = ns_id;
     ns->lba_count = id->nsze;
 
+    ns->prp = malloc_high(sizeof(*ns->prp));
+    if (!ns->prp) {
+        warn_noalloc();
+        free(ns);
+        goto free_buffer;
+    }
+    memset(ns->prp, 0, sizeof(*ns->prp));
+
     struct nvme_lba_format *fmt = &id->lbaf[current_lba_format];
 
     ns->block_size    = 1U << fmt->lbads;
@@ -431,10 +439,10 @@ nvme_io_readwrite(struct nvme_namespace *ns, u64 lba, char *buf, u16 count,
 
     if ((ns->block_size * count) > (NVME_PAGE_SIZE * 2)) {
         /* We need to describe more than 2 pages, rely on PRP List */
-        prp2 = ns->prpl;
+        prp2 = ns->prp->prpl;
     } else if ((ns->block_size * count) > NVME_PAGE_SIZE) {
         /* Directly embed the 2nd page if we only need 2 pages */
-        prp2 = (void *)(long)ns->prpl[0];
+        prp2 = (void *)(long)ns->prp->prpl[0];
     } else {
         /* One page is enough, don't expose anything else */
         prp2 = NULL;
@@ -465,15 +473,15 @@ nvme_io_readwrite(struct nvme_namespace *ns, u64 lba, char *buf, u16 count,
 
 static void nvme_reset_prpl(struct nvme_namespace *ns)
 {
-    ns->prpl_len = 0;
+    ns->prp->prpl_len = 0;
 }
 
 static int nvme_add_prpl(struct nvme_namespace *ns, u64 base)
 {
-    if (ns->prpl_len >= NVME_MAX_PRPL_ENTRIES)
+    if (ns->prp->prpl_len >= NVME_MAX_PRPL_ENTRIES)
         return -1;
 
-    ns->prpl[ns->prpl_len++] = base;
+    ns->prp->prpl[ns->prp->prpl_len++] = base;
 
     return 0;
 }
@@ -492,7 +500,7 @@ static int nvme_build_prpl(struct nvme_namespace *ns, void *op_buf, u16 count)
     size = count * ns->block_size;
     /* Special case for transfers that fit into PRP1, but are unaligned */
     if (((size + (base & ~NVME_PAGE_MASK)) <= NVME_PAGE_SIZE)) {
-        ns->prp1 = op_buf;
+        ns->prp->prp1 = op_buf;
         return count;
     }
 
@@ -507,7 +515,7 @@ static int nvme_build_prpl(struct nvme_namespace *ns, void *op_buf, u16 count)
     for (; size > 0; base += NVME_PAGE_SIZE, size -= NVME_PAGE_SIZE) {
         if (first_page) {
             /* First page is special */
-            ns->prp1 = (void*)base;
+            ns->prp->prp1 = (void*)base;
             first_page = 0;
             continue;
         }
@@ -726,7 +734,7 @@ nvme_cmd_readwrite(struct nvme_namespace *ns, struct disk_op_s *op, int write)
 
         blocks = nvme_build_prpl(ns, op_buf, blocks_remaining);
         if (blocks) {
-            res = nvme_io_readwrite(ns, op->lba + i, ns->prp1, blocks, write);
+            res = nvme_io_readwrite(ns, op->lba + i, ns->prp->prp1, blocks, write);
             dprintf(5, "ns %u %s lba %llu+%u: %d\n", ns->ns_id, write ? "write"
                                                                       : "read",
                     op->lba, blocks, res);
