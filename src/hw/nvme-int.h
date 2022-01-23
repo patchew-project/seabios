@@ -156,7 +156,6 @@ struct nvme_lba_format {
     u16 ms;
     u8  lbads;
     u8  rp;
-    u8  res;
 };
 
 struct nvme_identify_ns {
