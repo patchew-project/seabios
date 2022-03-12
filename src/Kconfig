@@ -571,6 +571,15 @@ menu "Debugging"
             provide the 32 bit address. E.g. 0xFEDC6000 for the AMD Kern
             (a.k.a Hudson UART).
 
+    config DEBUG_VGA_CONSOLE
+        depends on DEBUG_LEVEL != 0 && !THREADS
+        bool "VGA console debugging"
+        default y
+        help
+            Send debugging information to vga console. This is only displayed
+            after the VGA console has loaded, and only in 32 bit flat regions
+            of code. Requires that threads are disabled.
+
     config DEBUG_IO
         depends on QEMU_HARDWARE && DEBUG_LEVEL != 0
         bool "Special IO port debugging"
