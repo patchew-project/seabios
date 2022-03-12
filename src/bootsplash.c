@@ -36,6 +36,8 @@ call16_int10(struct bregs *br)
  * VGA text / graphics console
  ****************************************************************/
 
+static int VgaConsoleActive = 0;
+
 void
 enable_vga_console(void)
 {
@@ -47,9 +49,16 @@ enable_vga_console(void)
     br.ax = 0x0003;
     call16_int10(&br);
 
+    VgaConsoleActive = 1;
+
     // Write to screen.
     printf("SeaBIOS (version %s)\n", VERSION);
     display_uuid();
+}
+
+int vga_console_active(void)
+{
+    return VgaConsoleActive;
 }
 
 static int

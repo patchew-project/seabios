@@ -50,6 +50,7 @@ int boot_lchs_find_ata_device(struct pci_device *pci, int chanid, int slave,
 
 // bootsplash.c
 void enable_vga_console(void);
+int vga_console_active(void);
 void enable_bootsplash(void);
 void disable_bootsplash(void);
 

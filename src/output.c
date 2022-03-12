@@ -17,11 +17,14 @@
 #include "output.h" // dprintf
 #include "stacks.h" // call16_int
 #include "string.h" // memset
-#include "util.h" // ScreenAndDebug
+#include "util.h" // ScreenAndDebug vga_console_active
 
 struct putcinfo {
     void (*func)(struct putcinfo *info, char c);
 };
+
+static void __debug_putc(char c);
+static void __screen_putc(char c);
 
 
 /****************************************************************
@@ -35,9 +38,8 @@ debug_banner(void)
     dprintf(1, "BUILD: %s\n", BUILDINFO);
 }
 
-// Write a character to debug port(s).
 static void
-debug_putc(struct putcinfo *action, char c)
+__debug_putc(char c)
 {
     if (! CONFIG_DEBUG_LEVEL)
         return;
@@ -45,6 +47,16 @@ debug_putc(struct putcinfo *action, char c)
     if (!MODESEGMENT)
         coreboot_debug_putc(c);
     serial_debug_putc(c);
+}
+
+// Write a character to debug port(s).
+static void
+debug_putc(struct putcinfo *action, char c)
+{
+    __debug_putc(c);
+    if (CONFIG_DEBUG_LEVEL && CONFIG_DEBUG_VGA_CONSOLE && !MODESEGMENT
+        && vga_console_active())
+        __screen_putc(c);
 }
 
 // Flush any pending output to debug port(s).
@@ -86,15 +98,22 @@ screenc(char c)
     call16_int(0x10, &br);
 }
 
+static void
+__screen_putc(char c)
+{
+    ASSERT32FLAT();
+    if (c == '\n')
+        screenc('\r');
+    screenc(c);
+}
+
 // Handle a character from a printf request.
 static void
 screen_putc(struct putcinfo *action, char c)
 {
     if (ScreenAndDebug)
-        debug_putc(&debuginfo, c);
-    if (c == '\n')
-        screenc('\r');
-    screenc(c);
+        __debug_putc(c);
+    __screen_putc(c);
 }
 
 static struct putcinfo screeninfo = { screen_putc };
