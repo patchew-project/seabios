@@ -18,6 +18,33 @@
 #include "util.h" // MaxCountCPUs
 #include "x86.h" // cpuid
 
+/* table to obtain IOAPIC INTIN pin # for a certain pci slot and pin */
+
+/* daisy chaining in line with acpi _PRT */
+#define SLOT_GSIE {0x14, 0x15, 0x16, 0x17}
+#define SLOT_GSIF {0x15, 0x16, 0x17, 0x14}
+#define SLOT_GSIG {0x16, 0x17, 0x14, 0x15}
+#define SLOT_GSIH {0x17, 0x14, 0x15, 0x16}
+#define SLOT_GSIA {0x10, 0x11, 0x12, 0x13}
+
+u8 pirq_intin[32][4] = { SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+	                 SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+			 SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+			 SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+			 SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+			 SLOT_GSIE, SLOT_GSIF, SLOT_GSIG, SLOT_GSIH,
+			 SLOT_GSIE,
+
+			 /* INTA -> PIRQA for slot 25 - 31, but 30
+                         see the default value of D<N>IR */
+			 SLOT_GSIA, SLOT_GSIA, SLOT_GSIA, SLOT_GSIA,
+			 SLOT_GSIA,
+
+			 /* PCIe->PCI bridge. use PIRQ[E-H] */
+			 SLOT_GSIE,
+
+			 SLOT_GSIA };
+
 void
 mptable_setup(void)
 {
@@ -114,7 +141,6 @@ mptable_setup(void)
         if (pci_bdf_to_bus(bdf) != 0)
             break;
         int pin = pci_config_readb(bdf, PCI_INTERRUPT_PIN);
-        int irq = pci_config_readb(bdf, PCI_INTERRUPT_LINE);
         if (pin == 0)
             continue;
         if (dev != pci_bdf_to_busdev(bdf)) {
@@ -131,7 +157,7 @@ mptable_setup(void)
         intsrc->srcbus = pci_bdf_to_bus(bdf); /* PCI bus */
         intsrc->srcbusirq = (pci_bdf_to_dev(bdf) << 2) | (pin - 1);
         intsrc->dstapic = ioapic_id;
-        intsrc->dstirq = irq;
+        intsrc->dstirq = pirq_intin[pci_bdf_to_dev(bdf)][pin - 1];
         intsrc++;
     }
 
