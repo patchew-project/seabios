@@ -494,25 +494,25 @@ menu "BIOS Tables"
             Support generation of MPTable.
     config SMBIOS
         bool "SMBIOS"
-        default y
+        default n
         help
             Support generation of SM BIOS tables.  This is also
             sometimes called DMI.
     config ACPI
         bool "ACPI"
-        default y
+        default n
         help
             Support generation of ACPI tables.
     config ACPI_DSDT
         bool "Include default ACPI DSDT"
-        default y
+        default n
         depends on ACPI
         help
             Include default DSDT ACPI table in BIOS.
             Required for QEMU 1.3 and older.
             This option can be disabled for QEMU 1.4 and newer
             to save some space in the ROM file.
-            If unsure, say Y.
+            If unsure, say N.
     config FW_ROMFILE_LOAD
         bool "Load BIOS tables from ROM files"
         depends on QEMU_HARDWARE
