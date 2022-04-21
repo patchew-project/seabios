@@ -226,6 +226,20 @@ zonelow_expand(u32 size, u32 align, struct allocinfo_s *fill)
     return alloc_new(&ZoneLow, size, align, fill);
 }
 
+static u32
+zonehigh_expand(u32 size, u32 align, struct allocinfo_s *fill)
+{
+    u32 xsize = ALIGN(size, BUILD_MAX_HIGHTABLE);
+    u32 xalign = align > PAGE_SIZE ? align : PAGE_SIZE;
+    u32 xdata = malloc_palloc(&ZoneTmpHigh, xsize, xalign);
+    if (!xdata)
+        return 0;
+
+    alloc_add(&ZoneHigh, xdata, xdata + xsize);
+    e820_add(xdata, size, E820_RESERVED);
+    return alloc_new(&ZoneHigh, size, align, fill);
+}
+
 
 /****************************************************************
  * tracked memory allocations
@@ -245,6 +259,8 @@ malloc_palloc(struct zone_s *zone, u32 size, u32 align)
     u32 data = alloc_new(zone, size, align, &tempdetail.datainfo);
     if (!CONFIG_MALLOC_UPPERMEMORY && !data && zone == &ZoneLow)
         data = zonelow_expand(size, align, &tempdetail.datainfo);
+    if (!data && zone == &ZoneHigh)
+        data = zonehigh_expand(size, align, &tempdetail.datainfo);
     if (!data)
         return 0;
 
