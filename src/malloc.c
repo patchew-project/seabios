@@ -423,7 +423,7 @@ malloc_preinit(void)
 
     // Populate temp high ram
     u32 highram_start = 0;
-    u32 highram_size = BUILD_MAX_HIGHTABLE;
+    u32 highram_size = BUILD_MIN_HIGHTABLE;
     int i;
     for (i=e820_count-1; i>=0; i--) {
         struct e820entry *en = &e820_list[i];
@@ -434,6 +434,8 @@ malloc_preinit(void)
             continue;
         u32 s = en->start, e = end;
         if (!highram_start) {
+            if (e > BUILD_MAX_HIGHTABLE * 16)
+                highram_size = BUILD_MAX_HIGHTABLE;
             u32 newe = ALIGN_DOWN(e - highram_size, MALLOC_MIN_ALIGN);
             if (newe <= e && newe >= s) {
                 highram_start = newe;
