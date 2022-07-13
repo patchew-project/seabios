@@ -227,6 +227,13 @@ menu "Hardware support"
         default y
         help
             Support floppy drive access.
+    config LEGACY_FLOPPY
+        depends on FLOPPY && COREBOOT
+        bool "Get floppy type from CMOS"
+        default n
+        help
+            Support boot from CMOS defined floppy. Used by legacy OSes
+            on IBM PC compatible machine under coreboot.
     config FLASH_FLOPPY
         depends on DRIVES
         bool "Floppy images from CBFS or fw_cfg"
