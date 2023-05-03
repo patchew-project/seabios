@@ -419,6 +419,23 @@ snprintf(char *str, size_t size, const char *fmt, ...)
     return end - str;
 }
 
+char hwerror_str[512];
+struct snprintfinfo hwerror_info = {
+    .info  = { putc_str },
+    .str   = hwerror_str,
+    .end   = hwerror_str + sizeof(hwerror_str) - 1,
+};
+
+void
+hwerr_printf(const char *fmt, ...)
+{
+    ASSERT32FLAT();
+    va_list args;
+    va_start(args, fmt);
+    bvprintf(&hwerror_info.info, fmt, args);
+    va_end(args);
+}
+
 // Build a formatted string - malloc'ing the memory.
 char *
 znprintf(size_t size, const char *fmt, ...)

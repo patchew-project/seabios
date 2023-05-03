@@ -16,6 +16,11 @@ char * znprintf(size_t size, const char *fmt, ...)
     __attribute__ ((format (printf, 2, 3)));
 void __dprintf(const char *fmt, ...)
     __attribute__ ((format (printf, 1, 2)));
+
+extern char hwerror_str[512];
+void hwerr_printf(const char *fmt, ...)
+    __attribute__ ((format (printf, 1, 2)));
+
 struct bregs;
 void __debug_enter(struct bregs *regs, const char *fname);
 void __debug_isr(const char *fname);

@@ -216,6 +216,10 @@ maininit(void)
         device_hardware_setup();
         wait_threads();
     }
+    if (hwerror_str[0])
+        printf("\n"
+               "hardware setup errors:\n"
+               "%s", hwerror_str);
 
     // Run option roms
     optionrom_setup();
