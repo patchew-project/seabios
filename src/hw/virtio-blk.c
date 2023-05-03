@@ -193,8 +193,8 @@ init_virtio_blk(void *data)
             vdrive->drive.blksize = DISK_SECTOR_SIZE;
         }
         if (vdrive->drive.blksize != DISK_SECTOR_SIZE) {
-            dprintf(1, "virtio-blk %pP block size %d is unsupported\n",
-                    pci, vdrive->drive.blksize);
+            hwerr_printf("virtio-blk %pP block size %d is unsupported\n",
+                         pci, vdrive->drive.blksize);
             goto fail;
         }
         dprintf(3, "virtio-blk %pP blksize=%d sectors=%u size_max=%u "

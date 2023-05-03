@@ -336,7 +336,7 @@ scsi_drive_setup(struct drive_s *drive, const char *s, int prio)
     // 64-bit LBA anyway.
     drive->blksize = be32_to_cpu(capdata.blksize);
     if (drive->blksize != DISK_SECTOR_SIZE) {
-        dprintf(1, "%s: unsupported block size %d\n", s, drive->blksize);
+        hwerr_printf("%s: unsupported block size %d\n", s, drive->blksize);
         return -1;
     }
     drive->sectors = (u64)be32_to_cpu(capdata.sectors) + 1;
