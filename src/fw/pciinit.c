@@ -51,6 +51,7 @@ u64 pcimem_end     = BUILD_PCIMEM_END;
 u64 pcimem64_start = BUILD_PCIMEM64_START;
 u64 pcimem64_end   = BUILD_PCIMEM64_END;
 u64 pci_io_low_end = 0xa000;
+u32 pci_use_64bit  = 0;
 
 struct pci_region_entry {
     struct pci_device *dev;
@@ -920,6 +921,8 @@ static int pci_bios_check_devices(struct pci_bus *busses)
         for (type = 0; type < PCI_REGION_TYPE_COUNT; type++) {
             u64 align = (type == PCI_REGION_TYPE_IO) ?
                 PCI_BRIDGE_IO_MIN : PCI_BRIDGE_MEM_MIN;
+            if (pci_use_64bit && (type == PCI_REGION_TYPE_PREFMEM))
+                align = (u64)1 << (PhysBits - 11);
             if (!pci_bridge_has_region(s->bus_dev, type))
                 continue;
             u64 size = 0;
@@ -1108,7 +1111,7 @@ static void pci_bios_map_devices(struct pci_bus *busses)
         panic("PCI: out of I/O address space\n");
 
     dprintf(1, "PCI: 32: %016llx - %016llx\n", pcimem_start, pcimem_end);
-    if (pci_bios_init_root_regions_mem(busses)) {
+    if (pci_use_64bit || pci_bios_init_root_regions_mem(busses)) {
         struct pci_region r64_mem, r64_pref;
         r64_mem.list.first = NULL;
         r64_pref.list.first = NULL;
@@ -1132,6 +1135,8 @@ static void pci_bios_map_devices(struct pci_bus *busses)
             u64 top = 1LL << PhysBits;
             u64 size = (ALIGN(sum_mem, (1LL<<30)) +
                         ALIGN(sum_pref, (1LL<<30)));
+            if (pci_use_64bit)
+                size = ALIGN(size, (1LL<<(PhysBits-3)));
             if (r64_mem.base < top - size) {
                 r64_mem.base = top - size;
             }
@@ -1173,6 +1178,9 @@ pci_setup(void)
         return;
 
     dprintf(3, "pci setup\n");
+
+    if (PhysBits >= 36 && LongMode && RamSizeOver4G)
+        pci_use_64bit = 1;
 
     dprintf(1, "=== PCI bus & bridge init ===\n");
     if (pci_probe_host() != 0) {
