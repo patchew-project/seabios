@@ -31,6 +31,8 @@ typedef struct QemuCfgDmaAccess {
 extern u32 RamSize;
 extern u64 RamSizeOver4G;
 extern int PlatformRunningOn;
+extern u8 PhysBits;
+extern int LongMode;
 
 static inline int runningOnQEMU(void) {
     return CONFIG_QEMU || (
