@@ -137,6 +137,7 @@ extern u64 pcimem64_start, pcimem64_end;
 extern const u8 pci_irqs[4];
 void pci_setup(void);
 void pci_resume(void);
+void pci_bios_init_devices(void);
 
 // fw/pirtable.c
 void pirtable_setup(void);

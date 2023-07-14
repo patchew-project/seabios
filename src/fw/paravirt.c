@@ -205,6 +205,7 @@ qemu_platform_setup(void)
 
     if (runningOnXen()) {
         pci_probe_devices();
+        pci_bios_init_devices();
         xen_hypercall_setup();
         xen_biostable_setup();
         return;

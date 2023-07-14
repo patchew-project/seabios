@@ -417,7 +417,7 @@ static void pci_bios_init_device(struct pci_device *pci)
                          PCI_BRIDGE_CTL_SERR);
 }
 
-static void pci_bios_init_devices(void)
+void pci_bios_init_devices(void)
 {
     struct pci_device *pci;
     foreachpci(pci) {
