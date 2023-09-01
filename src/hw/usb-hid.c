@@ -11,8 +11,14 @@
 #include "usb.h" // usb_ctrlrequest
 #include "usb-hid.h" // usb_keyboard_setup
 #include "util.h" // process_key
+#include "malloc.h" // malloc_low
 
-struct usb_pipe *keyboard_pipe VARFSEG;
+struct keyboard_list {
+    struct usb_pipe *keyboard_pipe;
+    struct keyboard_list *next;
+};
+
+struct keyboard_list *keyboard_list VARFSEG;
 struct usb_pipe *mouse_pipe VARFSEG;
 
 
@@ -62,10 +68,12 @@ static int
 usb_kbd_setup(struct usbdevice_s *usbdev
               , struct usb_endpoint_descriptor *epdesc)
 {
+    int kbd_idx = 0;
+    struct usb_pipe *keyboard_pipe;
+    struct keyboard_list *prev;
+    struct keyboard_list *end;
+
     if (! CONFIG_USB_KEYBOARD)
-        return -1;
-    if (keyboard_pipe)
-        // XXX - this enables the first found keyboard (could be random)
         return -1;
 
     if (epdesc->wMaxPacketSize < sizeof(struct keyevent)
@@ -91,7 +99,26 @@ usb_kbd_setup(struct usbdevice_s *usbdev
     if (!keyboard_pipe)
         return -1;
 
-    dprintf(1, "USB keyboard initialized\n");
+    prev = end = GET_GLOBAL(keyboard_list);
+    while (end) {
+        prev = end;
+        end = end->next;
+        kbd_idx++;
+    }
+
+    end = malloc_low(sizeof(*end));
+    if (!end)
+        return -1;
+
+    end->keyboard_pipe = keyboard_pipe;
+    end->next = NULL;
+
+    if (!prev)
+        keyboard_list = end;
+    else
+        prev->next = end;
+
+    dprintf(1, "USB keyboard %d initialized\n", kbd_idx);
     return 0;
 }
 
@@ -321,12 +348,9 @@ handle_key(struct keyevent *data)
 
 // Check if a USB keyboard event is pending and process it if so.
 static void
-usb_check_key(void)
+usb_check_key(struct usb_pipe *pipe)
 {
     if (! CONFIG_USB_KEYBOARD)
-        return;
-    struct usb_pipe *pipe = GET_GLOBAL(keyboard_pipe);
-    if (!pipe)
         return;
 
     for (;;) {
@@ -344,7 +368,7 @@ usb_kbd_active(void)
 {
     if (! CONFIG_USB_KEYBOARD)
         return 0;
-    return GET_GLOBAL(keyboard_pipe) != NULL;
+    return GET_GLOBAL(keyboard_list) != NULL;
 }
 
 // Handle a ps2 style keyboard command.
@@ -451,6 +475,9 @@ usb_mouse_command(int command, u8 *param)
 void
 usb_check_event(void)
 {
-    usb_check_key();
+    struct keyboard_list *kbd_list = GET_GLOBAL(keyboard_list);
+
+    for(; kbd_list != NULL; kbd_list = kbd_list->next)
+        usb_check_key(kbd_list->keyboard_pipe);
     usb_check_mouse();
 }
