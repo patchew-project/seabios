@@ -182,6 +182,14 @@ static void physbits(int qemu_quirk)
             __func__, signature, pae ? "yes" : "no", CPULongMode ? "yes" : "no",
             physbits, valid ? "yes" : "no");
 
+    if (valid && physbits > 46) {
+        // Old linux kernels have trouble dealing with more than 46
+        // phys-bits, so avoid that for now.  Seems to be a bug in the
+        // virtio-pci driver.  Reported: centos-7, ubuntu-18.04
+        dprintf(1, "%s: using phys-bits=46 (old linux kernel compatibility)\n", __func__);
+        physbits = 46;
+    }
+
     if (valid)
         CPUPhysBits = physbits;
 }
