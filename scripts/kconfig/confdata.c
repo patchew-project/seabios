@@ -110,7 +110,9 @@ char *conf_get_default_confname(void)
 	name = conf_expand_value(conf_defname);
 	env = getenv(SRCTREE);
 	if (env) {
-		sprintf(fullname, "%s/%s", env, name);
+		int fullname_max_bytes = snprintf(fullname, sizeof(fullname), "%s/%s", env, name);
+		if ((fullname_max_bytes < 0) || (fullname_max_bytes >= sizeof(fullname)))
+			return NULL;
 		if (!stat(fullname, &buf))
 			return fullname;
 	}
@@ -768,10 +770,14 @@ int conf_write(const char *name)
 	} else
 		basename = conf_get_configname();
 
-	sprintf(newname, "%s%s", dirname, basename);
+	int newname_max_bytes = snprintf(newname, sizeof(newname), "%s%s",dirname, basename);
+	if ((newname_max_bytes < 0) || (newname_max_bytes >= sizeof(newname)))
+		return 1;
 	env = getenv("KCONFIG_OVERWRITECONFIG");
 	if (!env || !*env) {
-		sprintf(tmpname, "%s.tmpconfig.%d", dirname, (int)getpid());
+		int tmpname_max_bytes = snprintf(tmpname, sizeof(tmpname), "%s.tmpconfig.%d", dirname, (int)getpid());
+		if ((tmpname_max_bytes < 0) || (tmpname_max_bytes >= sizeof(tmpname)))
+			return 1;
 		out = fopen(tmpname, "w");
 	} else {
 		*tmpname = 0;
@@ -822,6 +828,8 @@ next:
 	fclose(out);
 
 	if (*tmpname) {
+		if (strlen(dirname) + strlen(basename) + 5 > sizeof(dirname))
+			return 1;
 		strcat(dirname, basename);
 		strcat(dirname, ".old");
 		rename(newname, dirname);

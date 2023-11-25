@@ -2328,7 +2328,9 @@ FILE *zconf_fopen(const char *name)
 	if (!f && name != NULL && name[0] != '/') {
 		env = getenv(SRCTREE);
 		if (env) {
-			sprintf(fullname, "%s/%s", env, name);
+			int fname_max_bytes = snprintf(fullname, sizeof(fullname), "%s/%s", env, name);
+			if((fname_max_bytes < 0) || (fname_max_bytes >= sizeof(fullname)))
+				return NULL;
 			f = fopen(fullname, "r");
 		}
 	}

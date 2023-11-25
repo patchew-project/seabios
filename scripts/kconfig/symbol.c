@@ -675,7 +675,10 @@ bool sym_set_string_value(struct symbol *sym, const char *newval)
 		sym->def[S_DEF_USER].val = val = xmalloc(size);
 	else
 		return true;
-
+	if((strlen(val) + strlen(newval) + 1) > size) {
+		size = strlen(val) + strlen(newval) + 1;
+		sym->def[S_DEF_USER].val = val = realloc(val, size);
+	}
 	strcpy(val, newval);
 	free((void *)oldval);
 	sym_clear_all_valid();
@@ -906,6 +909,10 @@ const char *sym_expand_string_value(const char *in)
 
 		strcat(res, symval);
 		in = src;
+	}
+	if((strlen(res) + strlen(in) + 1) > reslen) {
+		reslen = strlen(res) + strlen(in) + 1;
+		res = realloc(res, reslen);
 	}
 	strcat(res, in);
 
