@@ -285,8 +285,7 @@ vga_set_mode(int mode, int flags)
         // Disable extra stack if it appears a modern OS is in use.
         // This works around bugs in some versions of Windows (Vista
         // and possibly later) when the stack is in the e-segment.
-        MASK_BDA_EXT(flags, BF_EXTRA_STACK
-                     , (flags & MF_LEGACY) ? BF_EXTRA_STACK : 0);
+        MASK_BDA_EXT(flags, BF_EXTRA_STACK, BF_EXTRA_STACK);
     if (memmodel == MM_TEXT) {
         SET_BDA(video_cols, width);
         SET_BDA(video_rows, height-1);
