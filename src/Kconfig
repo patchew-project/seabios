@@ -452,7 +452,7 @@ menu "BIOS interfaces"
         default y
         help
             Support int 155f BIOS callbacks specific to some Intel and
-            VIA on-board vga devices.
+            VIA on-board vga devices and MXM graphics cards.
 
     config DISABLE_A20
         bool "Disable A20"

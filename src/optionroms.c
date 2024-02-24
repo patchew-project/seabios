@@ -22,6 +22,7 @@
 #include "string.h" // memset
 #include "util.h" // get_pnp_offset
 #include "tcgbios.h" // tpm_*
+#include "vgahooks.h" // MXM30SIS
 
 static int EnforceChecksum, S3ResumeVga, RunPCIroms;
 
@@ -462,6 +463,13 @@ vgarom_setup(void)
     S3ResumeVga = romfile_loadint("etc/s3-resume-vga-init", CONFIG_QEMU);
     RunPCIroms = romfile_loadint("etc/pci-optionrom-exec", 2);
     ScreenAndDebug = romfile_loadint("etc/screen-and-debug", 1);
+
+    // Load MXM 3.0 System Information Structure, if it exists
+    void *mxm_sis = romfile_loadfile_low("mxm-30-sis", NULL);
+    if (mxm_sis)
+        MXM30SIS = (u32)mxm_sis;
+    else
+        MXM30SIS = 0;
 
     // Clear option rom memory
     memset((void*)BUILD_ROM_START, 0, rom_get_max() - BUILD_ROM_START);

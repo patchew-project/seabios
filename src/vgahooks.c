@@ -18,8 +18,10 @@
 #define VH_VIA 1
 #define VH_INTEL 2
 #define VH_SMI 3
+#define VH_MXM 4
 
 int VGAHookHandlerType VARFSEG;
+u32 MXM30SIS VARFSEG;
 
 static void
 handle_155fXX(struct bregs *regs)
@@ -297,6 +299,71 @@ winent_mb6047_setup(struct pci_device *pci)
 }
 
 /****************************************************************
+ * MXM VGA hooks
+ ****************************************************************/
+
+// Function 0: Return Specification Support Level
+static void
+mxm_V30_F00(struct bregs *regs)
+{
+    regs->ax = 0x005f; // Success
+    regs->bl = 0x30; // MXM 3.0
+    regs->cx = 0x0003; // Supported Functions
+    set_success(regs);
+}
+
+// Function 1: Return a Pointer to the MXM Structure
+static void
+mxm_V30_F01(struct bregs *regs)
+{
+    switch (regs->cx) {
+    case 0x0030:
+        regs->ax = 0x005f; // Success
+        regs->es = GET_GLOBAL(MXM30SIS)/16;
+        regs->di = GET_GLOBAL(MXM30SIS)%16;
+        set_success(regs);
+        break;
+    default:
+        handle_155fXX(regs);
+        break;
+    }
+}
+
+static void
+mxm_V30(struct bregs *regs)
+{
+    switch (regs->bx) {
+    case 0xff00: mxm_V30_F00(regs); break;
+    case 0xff01: mxm_V30_F01(regs); break;
+    default:   handle_155fXX(regs); break;
+    }
+}
+
+static void
+mxm_155f80(struct bregs *regs)
+{
+    // TODO: implement other versions, like 2.1
+    mxm_V30(regs);
+}
+
+static void
+mxm_155f(struct bregs *regs)
+{
+    switch (regs->al) {
+    case 0x80: mxm_155f80(regs); break;
+    default:   handle_155fXX(regs); break;
+    }
+}
+
+void
+mxm_setup(void)
+{
+    VGAHookHandlerType = VH_MXM;
+}
+
+
+
+/****************************************************************
  * Entry and setup
  ****************************************************************/
 
@@ -313,6 +380,7 @@ handle_155f(struct bregs *regs)
     switch (htype) {
     case VH_VIA:   via_155f(regs); break;
     case VH_INTEL: intel_155f(regs); break;
+    case VH_MXM:   mxm_155f(regs); break;
     default:       handle_155fXX(regs); break;
     }
 }
@@ -352,4 +420,6 @@ vgahook_setup(struct pci_device *pci)
         via_setup(pci);
     else if (pci->vendor == PCI_VENDOR_ID_INTEL)
         intel_setup(pci);
+    else if (GET_GLOBAL(MXM30SIS))
+        mxm_setup();
 }
