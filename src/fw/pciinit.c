@@ -1195,8 +1195,10 @@ pci_setup(void)
         }
     }
 
+#if 0
     if (CPUPhysBits >= 36 && CPULongMode && RamSizeOver4G)
         pci_pad_mem64 = 1;
+#endif
 
     dprintf(1, "=== PCI bus & bridge init ===\n");
     if (pci_probe_host() != 0) {
