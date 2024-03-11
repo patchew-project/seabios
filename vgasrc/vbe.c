@@ -377,6 +377,47 @@ fail:
 }
 
 static void
+vbe_104f09(struct bregs *regs)
+{
+    struct vgamode_s *vmode_g = get_current_mode();
+    if (! vmode_g)
+        goto fail;
+    u8 memmodel = GET_GLOBAL(vmode_g->memmodel);
+    u8 depth = GET_GLOBAL(vmode_g->depth);
+    if (memmodel == MM_DIRECT || memmodel == MM_YUV || depth > 8) {
+        regs->ax = 0x034f;
+        return;
+    }
+    if (regs->dh)
+        goto fail;
+    u8 start = regs->dl;
+    int count = regs->cx;
+    int max_colors = 1 << depth;
+    if (start + count > max_colors)
+        goto fail;
+    u16 seg = regs->es;
+    struct vbe_palette_entry *pal = (void*)(regs->di+0);
+    int ret;
+    switch (regs->bl) {
+    case 0x80:
+    case 0x00:
+        ret = vgahw_set_palette_colors(seg, pal, start, count);
+        break;
+    case 0x01:
+        ret = vgahw_get_palette_colors(seg, pal, start, count);
+        break;
+    default:
+        goto fail;
+    }
+    if (ret < 0)
+        goto fail;
+    regs->ax = 0x004f;
+    return;
+fail:
+    regs->ax = 0x014f;
+}
+
+static void
 vbe_104f0a(struct bregs *regs)
 {
     debug_stub(regs);
@@ -456,6 +497,7 @@ handle_104f(struct bregs *regs)
     case 0x06: vbe_104f06(regs); break;
     case 0x07: vbe_104f07(regs); break;
     case 0x08: vbe_104f08(regs); break;
+    case 0x09: vbe_104f09(regs); break;
     case 0x0a: vbe_104f0a(regs); break;
     case 0x10: vbe_104f10(regs); break;
     case 0x15: vbe_104f15(regs); break;

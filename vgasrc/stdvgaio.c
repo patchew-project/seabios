@@ -6,6 +6,7 @@
 
 #include "farptr.h" // GET_FARVAR
 #include "stdvga.h" // VGAREG_PEL_MASK
+#include "std/vbe.h" // vbe_palette_entry
 #include "vgautil.h" // stdvga_pelmask_read
 #include "x86.h" // inb
 
@@ -183,4 +184,33 @@ stdvga_dac_write(u16 seg, u8 *data_far, u8 start, int count)
         data_far++;
         count--;
     }
+}
+
+int
+stdvga_set_palette_colors(u16 seg, struct vbe_palette_entry *pal_far, u8 start, int count)
+{
+    outb(start, VGAREG_DAC_WRITE_ADDRESS);
+    while (count) {
+        outb(GET_FARVAR(seg, pal_far->red), VGAREG_DAC_DATA);
+        outb(GET_FARVAR(seg, pal_far->green), VGAREG_DAC_DATA);
+        outb(GET_FARVAR(seg, pal_far->blue), VGAREG_DAC_DATA);
+        pal_far++;
+        count--;
+    }
+    return 0;
+}
+
+int
+stdvga_get_palette_colors(u16 seg, struct vbe_palette_entry *pal_far, u8 start, int count)
+{
+    outb(start, VGAREG_DAC_READ_ADDRESS);
+    while (count) {
+        SET_FARVAR(seg, pal_far->red, inb(VGAREG_DAC_DATA));
+        SET_FARVAR(seg, pal_far->green, inb(VGAREG_DAC_DATA));
+        SET_FARVAR(seg, pal_far->blue, inb(VGAREG_DAC_DATA));
+        SET_FARVAR(seg, pal_far->align, 0);
+        pal_far++;
+        count--;
+    }
+    return 0;
 }
