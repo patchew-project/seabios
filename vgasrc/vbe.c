@@ -377,6 +377,66 @@ fail:
 }
 
 static void
+vbe_104f09(struct bregs *regs)
+{
+    struct vgamode_s *vmode_g = get_current_mode();
+    if (! vmode_g)
+        goto fail;
+    u8 memmodel = GET_GLOBAL(vmode_g->memmodel);
+    u8 depth = GET_GLOBAL(vmode_g->depth);
+    if (memmodel == MM_DIRECT || memmodel == MM_YUV || depth > 8) {
+        regs->ax = 0x034f;
+        return;
+    }
+    if (regs->dh)
+        goto fail;
+    u8 start = regs->dl;
+    int count = regs->cx;
+    int max_colors = 1 << depth;
+    if (start + count > max_colors)
+        goto fail;
+    u16 seg = regs->es;
+    u8 *data_far = (void*)(regs->di+0);
+    u8 rgb[3];
+    int ret = 0;
+    int i;
+    switch (regs->bl) {
+    case 0x80:
+    case 0x00:
+        for (i = 0; i < count; i++) {
+            SET_SEG(ES, seg);
+            rgb[0] = GET_VAR(ES, data_far[i*4 + 2]);
+            rgb[1] = GET_VAR(ES, data_far[i*4 + 1]);
+            rgb[2] = GET_VAR(ES, data_far[i*4 + 0]);
+            ret = vgahw_dac_write(GET_SEG(SS), rgb, start + i, 1);
+            if (ret < 0)
+                goto fail;
+        }
+        break;
+    case 0x01:
+        for (i = 0; i < count; i++) {
+            ret = vgahw_dac_read(GET_SEG(SS), rgb, start + i, 1);
+            if (ret < 0)
+                goto fail;
+            SET_SEG(ES, seg);
+            SET_VAR(ES, data_far[i*4 + 0], rgb[2]);
+            SET_VAR(ES, data_far[i*4 + 1], rgb[1]);
+            SET_VAR(ES, data_far[i*4 + 2], rgb[0]);
+            SET_VAR(ES, data_far[i*4 + 3], 0);
+        }
+        break;
+    default:
+        goto fail;
+    }
+    if (ret < 0)
+        goto fail;
+    regs->ax = 0x004f;
+    return;
+fail:
+    regs->ax = 0x014f;
+}
+
+static void
 vbe_104f0a(struct bregs *regs)
 {
     debug_stub(regs);
@@ -456,6 +516,7 @@ handle_104f(struct bregs *regs)
     case 0x06: vbe_104f06(regs); break;
     case 0x07: vbe_104f07(regs); break;
     case 0x08: vbe_104f08(regs); break;
+    case 0x09: vbe_104f09(regs); break;
     case 0x0a: vbe_104f0a(regs); break;
     case 0x10: vbe_104f10(regs); break;
     case 0x15: vbe_104f15(regs); break;

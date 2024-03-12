@@ -141,6 +141,16 @@ static inline int vgahw_set_dacformat(struct vgamode_s *vmode_g, int val) {
     return stdvga_set_dacformat(vmode_g, val);
 }
 
+static inline int vgahw_dac_write(u16 seg, u8 *data_far, u8 start, int count) {
+    stdvga_dac_write(seg, data_far, start, count);
+    return 0;
+}
+
+static inline int vgahw_dac_read(u16 seg, u8 *data_far, u8 start, int count) {
+    stdvga_dac_read(seg, data_far, start, count);
+    return 0;
+}
+
 static inline int vgahw_save_restore(int cmd, u16 seg, void *data) {
     if (CONFIG_VGA_CIRRUS)
         return clext_save_restore(cmd, seg, data);
